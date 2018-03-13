@@ -2,12 +2,12 @@
 
 
 import pandas as pd
-import numpy as np
+from enum import IntEnum
 from const import *
 from keras.layers import Input, Dense, Conv2D, Flatten, Dropout, BatchNormalization, Activation
 from keras.models import Model
 from keras.optimizers import Adam
-from sklearn.metrics import mean_squared_error
+from evaluation.metrics import *
 from sklearn.decomposition import FactorAnalysis
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
@@ -15,6 +15,8 @@ from sklearn.model_selection import train_test_split
 import logging
 from keras.models import load_model
 import datetime
+from nn_model import DenseConvModel
+import tensorflow as tf
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
@@ -23,51 +25,9 @@ logging.basicConfig(
 )
 
 
-def mobike_distribution(y_train, y_test):
-    print('========================================================================')
-    print('Mobike Train & Test Distribution:')
-    print('Y_Train Size: ', len(y_train))
-    print('Y_Train Range (%.2f, %.2f): ' % (np.min(y_train), np.max(y_train)))
-    print('Y_Train Mean: ', np.mean(y_train))
-    print('Y_Train Std: ', np.std(y_train))
-
-    print('Y_Test Size: ', len(y_test))
-    print('Y_Test Range (%.2f, %.2f): ' % (np.min(y_test), np.max(y_test)))
-    print('Y_Test Mean: ', np.mean(y_test))
-    print('Y_Test Std: ', np.std(y_test))
-
-
-def mse_evaluation(model_name, y_test, y_predict, label='Test'):
-    mse = mean_squared_error(y_test, y_predict)
-    rmse = np.sqrt(mse)
-    print('========================================================================')
-    print('Model %s Performance:' % (model_name,))
-    print(label, 'MSE: ', mse)
-    print(label, 'RMSE: ', rmse)
-    return mse, rmse
-
-
-def entropy_evaluation(model_name, y_test, y_predict, label='Test', baseline_flag=False):
-    y_predict = y_predict.flatten()
-
-    y_predict_ratio = y_predict / np.sum(y_predict)
-    y_test_ratio = y_test / np.sum(y_test)
-
-    y_test_ratio = np.clip(y_test_ratio, 1e-08, 1)
-    y_predict_ratio = np.clip(y_predict_ratio, 1e-08, 1)
-
-    # cross_entropy = np.sum(y_test_ratio * (np.log(1 / y_predict_ratio)))
-    kl_divergence = np.sum(y_test_ratio * (np.log(y_test_ratio / y_predict_ratio)))
-    print('========================================================================')
-    print('Model %s Performance:' % (model_name,))
-    # print label, 'Cross Entropy: ', cross_entropy
-    if baseline_flag:
-        y_base_ratio = np.ones_like(y_test) / len(y_test)
-        print('Baseline KL Divergence: ', np.sum(y_test_ratio * (np.log(y_test_ratio / y_base_ratio))))
-        print('Baseline RMLSE: ', np.sqrt(mean_squared_error(np.log(y_test_ratio), np.log(y_base_ratio))))
-
-    print(label, 'KL Divergence: ', kl_divergence)
-    print(label, 'RMLSE: ', np.sqrt(mean_squared_error(np.log(y_test_ratio), np.log(y_predict_ratio))))
+class ModelChoice(IntEnum):
+    cnn = 0
+    dense_cnn = 1
 
 
 def transform_2_conv(lat_steps, lng_steps, x, y, size):
@@ -93,7 +53,18 @@ def transform_2_conv(lat_steps, lng_steps, x, y, size):
     return np.array(conv_samples), y_conv
 
 
-def build_model(input_shape=(5, 5, 2), dropout=0.5, lr=0.001):
+def build_model(input_shape=(5, 5, 2), model_choice=ModelChoice.cnn, lr=0.001):
+    if model_choice == ModelChoice.cnn:
+        return build_cnn_model(input_shape, lr=lr)
+    elif model_choice == ModelChoice.dense_cnn:
+        nn_model = DenseConvModel(
+            input_shape, first_filters=6, nb_dense_block_layers=(6, ), growth_rate=6, compression=0.5)
+        return nn_model.build_model()
+    else:
+        raise ValueError('not valid model choice')
+
+
+def build_cnn_model(input_shape=(5, 5, 2), dropout=0.5, lr=0.001):
     """
     build CNN model
     :param input_shape:
@@ -104,7 +75,8 @@ def build_model(input_shape=(5, 5, 2), dropout=0.5, lr=0.001):
     window = input_shape[0]
 
     inputs = Input(shape=input_shape)
-    layer = Conv2D(10, (window, window), activation='relu')(inputs)
+    layer = Conv2D(16, kernel_size=(3, 3), activation='relu', padding='same')(inputs)
+    layer = Conv2D(32, kernel_size=(3, 3), activation='relu')(layer)
     layer = Flatten()(layer)
 
     layer = Dense(32)(layer)
@@ -112,13 +84,13 @@ def build_model(input_shape=(5, 5, 2), dropout=0.5, lr=0.001):
     layer = Activation('relu')(layer)
     layer = Dropout(dropout)(layer)
 
-    layer = Dense(32)(layer)
-    layer = BatchNormalization()(layer)
-    layer = Activation('relu')(layer)
-    layer = Dropout(dropout)(layer)
-    predictions = Dense(1, activation='relu')(layer)
+    # layer = Dense(32)(layer)
+    # layer = BatchNormalization()(layer)
+    # layer = Activation('relu')(layer)
+    # layer = Dropout(dropout)(layer)
+    outputs = Dense(1)(layer)
 
-    nn_model = Model(inputs=inputs, outputs=predictions)
+    nn_model = Model(inputs=inputs, outputs=outputs)
     optimizer = Adam(lr=lr)
     nn_model.compile(optimizer=optimizer, loss='mse')
 
@@ -170,6 +142,7 @@ def get_train_val_test(train_cities, test_cities, window=5, n_components=2, mode
     x_test = test_df[FEATURES].values
     y_test = test_df[TARGET].values
 
+    # preprocess the data
     estimator = [
         ('scaler', StandardScaler()),
         ('reducer', FactorAnalysis(n_components=n_components))
@@ -185,12 +158,13 @@ def get_train_val_test(train_cities, test_cities, window=5, n_components=2, mode
         x_train = pipe.fit_transform(x_train)
         x_test = pipe.transform(x_test)
 
+    # scale the target y
     y_scaler = StandardScaler().fit(y_train[:, np.newaxis])
     if y_scale:
         y_train = y_scaler.transform(y_train[:, np.newaxis]).ravel()
         y_test = y_scaler.transform(y_test[:, np.newaxis]).ravel()
 
-    filter_count = y_scaler.transform(np.array([[1]])).ravel() if y_scale else 0
+    filter_count = y_scaler.transform(np.array([[1]])).ravel() if y_scale else 1
     x_train, y_train = get_conv_data(train_cities, x_train, y_train, window, filter_count=filter_count)
     x_test, y_test = get_conv_data(test_cities, x_test, y_test, window, filter_count=filter_count)
 
@@ -198,30 +172,36 @@ def get_train_val_test(train_cities, test_cities, window=5, n_components=2, mode
     return x_train, x_val, x_test, y_train, y_val, y_test, y_scaler
 
 
-def run(train_cities, test_cities, window=5, n_components=10, mode='common', y_scale=False, lr=0.001, epochs=40):
+def run(train_cities, test_cities, window=5, n_components=10, mode='common', y_scale=False,
+        model_choice=ModelChoice.cnn, lr=0.001, epochs=40):
     """
-
+    main entrance to run the model
     :param train_cities: train cities' names
     :param test_cities: test cities' names
     :param window: neighbor window size
     :param n_components: reduced feature dimensions
     :param mode: jointly fit, transform the data or only fit the data of the source city
     :param y_scale: whether scale the target
+    :param model_choice: cnn model choice, simple cnn | dense net | res net
     :param lr: init learning rate
     :param epochs: max fit epochs
     :return:
     """
+    config = tf.ConfigProto()
+    config.gpu_options.per_process_gpu_memory_fraction = 0.4
+
     x_train, x_val, x_test, y_train, y_val, y_test, y_scaler = get_train_val_test(
         train_cities, test_cities, window, n_components, mode, y_scale)
 
     best_val_loss = np.inf
-    model_save_path = './model/best_model_%s.h5' % datetime.datetime.now().strftime('%Y%m%d%H%M%S')
-    nn_model = build_model(x_train.shape[1:], lr=lr)
+    model_save_path = './model_save/best_model_%s.h5' % datetime.datetime.now().strftime('%Y%m%d%H%M%S')
+    nn_model = build_model(x_train.shape[1:], model_choice=model_choice, lr=lr)
     history_dict = {
         'loss': [],
         'val_loss': []
     }
-    for _ in range(epochs):
+    for i in range(epochs):
+        print('\nEpoch %s/%s' % (i + 1, epochs))
         history = nn_model.fit(
             x_train, y_train, validation_data=(x_val, y_val), batch_size=32, epochs=1, verbose=2).history
         for key, value in history.items():
@@ -252,4 +232,5 @@ def run(train_cities, test_cities, window=5, n_components=10, mode='common', y_s
 
 
 if __name__ == '__main__':
-    run(train_cities=('sh',), test_cities=('nb',), y_scale=False, epochs=40)
+    run(train_cities=('sh', ), test_cities=('nb',), y_scale=True, epochs=100, model_choice=ModelChoice.dense_cnn,
+        lr=0.001)
