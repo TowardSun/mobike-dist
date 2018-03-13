@@ -199,6 +199,18 @@ def get_train_val_test(train_cities, test_cities, window=5, n_components=2, mode
 
 
 def run(train_cities, test_cities, window=5, n_components=10, mode='common', y_scale=False, lr=0.001, epochs=40):
+    """
+
+    :param train_cities: train cities' names
+    :param test_cities: test cities' names
+    :param window: neighbor window size
+    :param n_components: reduced feature dimensions
+    :param mode: jointly fit, transform the data or only fit the data of the source city
+    :param y_scale: whether scale the target
+    :param lr: init learning rate
+    :param epochs: max fit epochs
+    :return:
+    """
     x_train, x_val, x_test, y_train, y_val, y_test, y_scaler = get_train_val_test(
         train_cities, test_cities, window, n_components, mode, y_scale)
 
