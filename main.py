@@ -315,11 +315,11 @@ def run(train_cities, test_cities, window=5,
         result_dict['t_rmlse'] = t_rmlse
         results.append(result_dict)
 
-    res_df = pd.DataFrame(results)
-    res_df = res_df[['reducer_choice', 'n_components', 'train_rmse', 'val_rmse', 'test_rmse', 's_kl', 's_rmlse'
-                     't_kl', 't_rmlse']]
-    res_df.sort_values(by='t_kl', inplace=True)
-    res_df.to_csv(os.path.join(task_dir, 'results.csv'), index=False)
+        res_df = pd.DataFrame(results)
+        res_df = res_df[['reducer_choice', 'n_components', 'train_rmse', 'val_rmse', 'test_rmse', 's_kl', 's_rmlse'
+                         't_kl', 't_rmlse']]
+        res_df.sort_values(by='t_kl', inplace=True)
+        res_df.to_csv(os.path.join(task_dir, 'results.csv'), index=False)
 
 
 if __name__ == '__main__':
