@@ -39,6 +39,7 @@ def entropy_evaluation(model_name, y_test, y_predict, label='Test', baseline_fla
 
     # cross_entropy = np.sum(y_test_ratio * (np.log(1 / y_predict_ratio)))
     kl_divergence = np.sum(y_test_ratio * (np.log(y_test_ratio / y_predict_ratio)))
+    rmlse = np.sqrt(mean_squared_error(np.log(y_test_ratio), np.log(y_predict_ratio)))
     print('========================================================================')
     print('Model %s Performance:' % (model_name,))
     # print label, 'Cross Entropy: ', cross_entropy
@@ -48,4 +49,5 @@ def entropy_evaluation(model_name, y_test, y_predict, label='Test', baseline_fla
         print('Baseline RMLSE: ', np.sqrt(mean_squared_error(np.log(y_test_ratio), np.log(y_base_ratio))))
 
     print(label, 'KL Divergence: ', kl_divergence)
-    print(label, 'RMLSE: ', np.sqrt(mean_squared_error(np.log(y_test_ratio), np.log(y_predict_ratio))))
+    print(label, 'RMLSE: ', rmlse)
+    return kl_divergence, rmlse

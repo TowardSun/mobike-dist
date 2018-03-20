@@ -1,23 +1,30 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
+from sklearn.base import BaseEstimator, TransformerMixin
 
 
-class TCA:
-    def __init__(self, dim=5, kernel_type='rbf', kernel_param=1, mu=1):
+class TCA(BaseEstimator, TransformerMixin):
+    def __init__(self, n_src, n_tar, n_components=5, kernel_type='rbf', kernel_param=1, mu=1):
         """
         Init function
-        :param dim: dims after tca (dim <= d)
+        :param n_components: dims after tca (n_components <= d)
         :param kernel_type: 'rbf' | 'linear' | 'poly' (default is 'rbf')
         :param kernel_param: kernel param
         :param mu: param
         """
-        self.dim = dim
+        self.n_src = n_src
+        self.n_tar = n_tar
+        self.n_components = n_components
         self.kernel_param = kernel_param
         self.kernel_type = kernel_type
         self.mu = mu
+        self.K = None
+        self.V = None
+        self.eig_values = None
 
-    def get_L(self, n_src, n_tar):
+    @staticmethod
+    def get_L(n_src, n_tar):
         """
         Get index matrix
         :param n_src: num of source domain
@@ -33,83 +40,75 @@ class TCA:
         L = np.vstack((L_up, L_down))
         return L
 
-    def get_kernel(self, kerneltype, kernelparam, x1, x2=None):
+    @staticmethod
+    def get_kernel(kernel_type, kernel_param, x1, x2=None):
         """
         Calculate kernel for TCA (inline func)
-        :param kerneltype: 'rbf' | 'linear' | 'poly'
-        :param kernelparam: param
+        :param kernel_type: 'rbf' | 'linear' | 'poly'
+        :param kernel_param: param
         :param x1: x1 matrix (n1,d)
         :param x2: x2 matrix (n2,d)
         :return: Kernel K
         """
         n1, dim = x1.shape
         K = None
-        if kerneltype == 'linear':
+        if kernel_type == 'linear':
             if x2 is not None:
                 K = np.dot(x2, x1.T)
             else:
                 K = np.dot(x1, x1.T)
-        elif kerneltype == 'poly':
+        elif kernel_type == 'poly':
             if x2 is not None:
-                K = np.power(np.dot(x1, x2.T), kernelparam)
+                K = np.power(np.dot(x1, x2.T), kernel_param)
             else:
-                K = np.power(np.dot(x1, x1.T), kernelparam)
-        elif kerneltype == 'rbf':
+                K = np.power(np.dot(x1, x1.T), kernel_param)
+        elif kernel_type == 'rbf':
             if x2 is not None:
                 n2 = x2.shape[0]
                 sum_x2 = np.sum(np.multiply(x2, x2), axis=1)
                 sum_x2 = sum_x2.reshape((len(sum_x2), 1))
                 K = np.exp(-1 * (
                     np.tile(np.sum(np.multiply(x1, x1), axis=1).T, (n2, 1)) +
-                    np.tile(sum_x2, (1, n1)) - 2 * np.dot(x2, x1.T)) / (dim * 2 * kernelparam))
+                    np.tile(sum_x2, (1, n1)) - 2 * np.dot(x2, x1.T)) / (dim * 2 * kernel_param))
             else:
                 P = np.sum(np.multiply(x1, x1), axis=1)
                 P = P.reshape((len(P), 1))
                 K = np.exp(
-                    -1 * (np.tile(P.T, (n1, 1)) + np.tile(P, (1, n1)) - 2 * np.dot(x1, x1.T)) / (dim * 2 * kernelparam))
+                    -1 * (np.tile(P.T, (n1, 1)) + np.tile(P, (1, n1)) - 2 * np.dot(x1, x1.T)) / (dim * 2 * kernel_param))
         # more kernels can be added
         return K
 
-    def fit_transform(self, x_src, x_tar, x_tar_o=None):
-        """
-        TCA main method. Wrapped from Sinno J. Pan and Qiang Yang's "Domain adaptation via transfer component ayalysis. IEEE TNN 2011"
-        :param x_src: Source domain data feature matrix. Shape is (n_src,d)
-        :param x_tar: Target domain data feature matrix. Shape is (n_tar,d)
-        :return: tranformed x_src_tca,x_tar_tca,x_tar_o_tca
-        """
-        n_src = x_src.shape[0]
-        n_tar = x_tar.shape[0]
-        X = np.vstack((x_src, x_tar))
-        L = self.get_L(n_src, n_tar)
+    def fit(self, X, y=None):
+        L = self.get_L(self.n_src, self.n_tar)
         L[np.isnan(L)] = 0
-        K = self.get_kernel(self.kernel_type, self.kernel_param, X)
-        K[np.isnan(K)] = 0
-        if x_tar_o is not None:
-            K_tar_o = self.get_kernel(self.kernel_type, self.kernel_param, X, x_tar_o)
+        self.K = self.get_kernel(self.kernel_type, self.kernel_param, X)
+        self.K[np.isnan(self.K)] = 0
 
-        H = np.identity(n_src + n_tar) - 1. / (n_src + n_tar) * np.ones(shape=(n_src + n_tar, 1)) * np.ones(
-            shape=(n_src + n_tar, 1)).T
-        forPinv = self.mu * np.identity(n_src + n_tar) + np.dot(np.dot(K, L), K)
-        forPinv[np.isnan(forPinv)] = 0
-        Kc = np.dot(np.dot(np.dot(np.linalg.pinv(forPinv), K), H), K)
+        H = np.identity(self.n_src + self.n_tar) - 1. / (self.n_src + self.n_tar) * np.ones(
+            (self.n_src + self.n_tar, 1)) * np.ones((self.n_src + self.n_tar, 1)).T
+        pinv = self.mu * np.identity(self.n_src + self.n_tar) + np.dot(np.dot(self.K, L), self.K)
+        pinv[np.isnan(pinv)] = 0
+        Kc = np.dot(np.dot(np.dot(np.linalg.pinv(pinv), self.K), H), self.K)
         Kc[np.isnan(Kc)] = 0
 
         D, V = np.linalg.eig(Kc)
         eig_values = D.reshape(len(D), 1)
-        eig_values_sorted = np.sort(eig_values[::-1], axis=0)
+        self.eig_values = np.sort(eig_values[::-1], axis=0)
         index_sorted = np.argsort(-eig_values, axis=0)
         V = V[:, index_sorted]
-        V = V.reshape((V.shape[0], V.shape[1]))
-        x_src_tca = np.dot(K[:n_src, :], V)
-        x_tar_tca = np.dot(K[n_src:, :], V)
-        if x_tar_o is not None:
-            x_tar_o_tca = np.dot(K_tar_o, V)
-        else:
-            x_tar_o_tca = None
+        self.V = V.reshape((V.shape[0], V.shape[1]))
+        return self
 
-        x_src_tca = np.asarray(x_src_tca[:, :self.dim], dtype=float)
-        x_tar_tca = np.asarray(x_tar_tca[:, :self.dim], dtype=float)
-        if x_tar_o is not None:
-            x_tar_o_tca = x_tar_o_tca[:, :self.dim]
+    def transform(self, X):
+        """
+        TCA main method. Wrapped from Sinno J. Pan and Qiang Yang's "Domain adaptation via transfer component analysis.
+        IEEE TNN 2011"
+        :return: transformed x_src_tca,x_tar_tca,x_tar_o_tca
+        """
+        x_src_tca = np.dot(self.K[:self.n_src, :], self.V)
+        x_tar_tca = np.dot(self.K[self.n_src:, :], self.V)
 
-        return x_src_tca, x_tar_tca, x_tar_o_tca
+        x_src_tca = np.asarray(x_src_tca[:, :self.n_components], dtype=float)
+        x_tar_tca = np.asarray(x_tar_tca[:, :self.n_components], dtype=float)
+
+        return np.vstack([x_src_tca, x_tar_tca])

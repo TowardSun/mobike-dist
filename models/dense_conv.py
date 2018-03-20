@@ -6,6 +6,7 @@ from keras.regularizers import l2
 from keras.layers import Input
 from keras.models import Model
 from keras.optimizers import Adam
+from keras.initializers import he_normal
 
 
 class DenseConvModel:
@@ -36,7 +37,7 @@ class DenseConvModel:
         x = Conv2D(filters,
                    kernel_size=kernel_size,
                    strides=strides,
-                   kernel_initializer='he_uniform',
+                   kernel_initializer='he_normal',
                    padding=padding,
                    use_bias=False,
                    kernel_regularizer=l2(weight_decay))(x)
@@ -92,7 +93,7 @@ class DenseConvModel:
         x = Activation('relu')(x)
         x = GlobalAveragePooling2D(name='output')(x)
 
-        outputs = Dense(1)(x)
+        outputs = Dense(1, kernel_initializer=he_normal(seed=0))(x)
 
         nn_model = Model(inputs=inputs, outputs=outputs)
         optimizer = Adam(lr=self.lr)
