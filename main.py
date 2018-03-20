@@ -21,6 +21,7 @@ from const import *
 from evaluation.metrics import *
 from models.dense_conv import DenseConvModel
 import os
+import keras.backend as K
 
 
 logger = logging.getLogger(__name__)
@@ -222,8 +223,9 @@ def run(train_cities, test_cities, window=5,
     :return:
     """
     config = tf.ConfigProto()
-    config.gpu_options.per_process_gpu_memory_fraction = 0.2
-    # config.gpu_options.allow_growth = True
+    # config.gpu_options.per_process_gpu_memory_fraction = 0.2
+    config.gpu_options.allow_growth = True
+    K.set_session(tf.Session(config=config))
 
     data_param_grid = dict(
         n_components=list(range(5, 31, 5)),
