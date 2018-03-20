@@ -256,9 +256,9 @@ def run(train_cities, test_cities, window=5,
         x_train, x_val, x_test, y_train, y_val, y_test, y_scaler = get_train_val_test(
             train_cities, test_cities, window, y_scale=y_scale, **data_param)
 
-        best_val_loss = np.inf
-        model_save_path = os.path.join(task_dir, 'best_model_%d.h5' % i)
-        for model_param in candidate_model_params:
+        data_best_loss = np.inf
+        data_best_model_path = ''
+        for j, model_param in enumerate(candidate_model_params):
             logger.info('Model config: %s' % model_param)
             nn_model = build_model(x_train.shape[1:], model_choice=model_choice, **model_param)
             history_dict = {
@@ -266,9 +266,11 @@ def run(train_cities, test_cities, window=5,
                 'val_loss': []
             }
 
+            best_val_loss = np.inf
             early_stop_counter = 0
-            for j in range(epochs):
-                print('\nEpoch %s/%s' % (j + 1, epochs))
+            model_save_path = os.path.join(task_dir, 'best_model_%d_%d.h5' % (i, j))
+            for k in range(epochs):
+                print('\nEpoch %s/%s' % (k + 1, epochs))
                 history = nn_model.fit(
                     x_train, y_train, validation_data=(x_val, y_val), batch_size=32, epochs=1, verbose=2).history
                 for key, value in history.items():
@@ -278,13 +280,18 @@ def run(train_cities, test_cities, window=5,
                     logger.info('Update model, last best loss {}, current val loss {}'.format(
                         best_val_loss, history['val_loss'][-1]))
                     best_val_loss = history['val_loss'][-1]
-                    nn_model.save(model_save_path)
                     early_stop_counter = 0
+                    nn_model.save(model_save_path)
+
                 early_stop_counter += 1
                 if early_stopping and early_stop_counter > early_stop_epoch:
                     break
 
-        nn_model = load_model(model_save_path)
+            if best_val_loss < data_best_loss:
+                data_best_loss = best_val_loss
+                data_best_model_path = model_save_path
+
+        nn_model = load_model(data_best_model_path)
 
         y_train_pred = nn_model.predict(x_train)
         y_val_pred = nn_model.predict(x_val)
