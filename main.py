@@ -227,7 +227,7 @@ def run(train_cities, test_cities, window=5,
 
     data_param_grid = dict(
         n_components=list(range(5, 31, 5)),
-        reducer_choice=[ReducerChoice.pca]
+        reducer_choice=[ReducerChoice.pca, ReducerChoice.fa, ReducerChoice.tca]
     )
     model_param_dict = {
         ModelChoice.cnn: dict(
