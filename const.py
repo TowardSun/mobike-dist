@@ -24,7 +24,7 @@ STREET_FEATURES = ['highway-bridleway', 'highway-cycleway', 'highway-footway', '
                    'railway-preserved', 'railway-rail',
                    'railway-subway', 'railway-tram']
 
-FEATURES = POI_FEATURES + ENGINEER_FEATURES
+FEATURES = POI_FEATURES + ENGINEER_FEATURES + STREET_FEATURES
 TARGET = 'mobike'
 
 

@@ -227,12 +227,12 @@ def run(train_cities, test_cities, window=5,
 
     data_param_grid = dict(
         n_components=list(range(5, 31, 5)),
-        reducer_choice=[ReducerChoice.tca]
+        reducer_choice=[ReducerChoice.pca]
     )
     model_param_dict = {
         ModelChoice.cnn: dict(
-            lr=[0.001],
-            dropout=[0.5]
+            lr=[0.001, 0.0001],
+            dropout=[0.2, 0.5]
         ),
         ModelChoice.dense_cnn: dict(
             lr=[0.001, 0.0001],
@@ -247,7 +247,7 @@ def run(train_cities, test_cities, window=5,
     candidate_model_params = list(ParameterGrid(param_grid=model_param_grid))
     results = []
 
-    task_dir = os.path.join('./logs', datetime.datetime.now().strftime('%Y%m%d%H%M%S'))
+    task_dir = os.path.join('./logs', datetime.datetime.now().strftime('%m%d%H%M%S'))
     if not os.path.exists(task_dir):
         os.mkdir(task_dir)
 
@@ -287,27 +287,38 @@ def run(train_cities, test_cities, window=5,
         nn_model = load_model(model_save_path)
 
         y_train_pred = nn_model.predict(x_train)
+        y_val_pred = nn_model.predict(x_val)
         y_test_pred = nn_model.predict(x_test)
 
         if y_scale:
-            y_train = y_scaler.inverse_transform(y_train)
-            y_test = y_scaler.inverse_transform(y_test)
-            y_train_pred = y_scaler.inverse_transform(y_train_pred)
-            y_test_pred = y_scaler.inverse_transform(y_test_pred)
+            y_train = y_scaler.inverse_transform(y_train).ravel()
+            y_val = y_scaler.inverse_transform(y_val).ravel()
+            y_test = y_scaler.inverse_transform(y_test).ravel()
+            y_train_pred = y_scaler.inverse_transform(y_train_pred).ravel()
+            y_val_pred = y_scaler.inverse_transform(y_val_pred).ravel()
+            y_test_pred = y_scaler.inverse_transform(y_test_pred).ravel()
 
-        mobike_distribution(y_train, y_test)
-        mse_evaluation(str(data_param), y_train, y_train_pred, 'Train')
-        mse_evaluation(str(data_param), y_test, y_test_pred)
-        entropy_evaluation(str(data_param), y_train, y_train_pred, 'Train')
-        kl, rmlse = entropy_evaluation(str(data_param), y_test, y_test_pred)
+        train_rmse = mse_evaluation(model_choice.name, y_train, y_train_pred, 'Train')
+        val_rmse = mse_evaluation(model_choice.name, y_val, y_val_pred, 'Val')
+        test_rmse = mse_evaluation(model_choice.name, y_test, y_test_pred)
+        s_kl, s_rmlse = entropy_evaluation(
+            model_choice.name, np.concatenate([y_train, y_val]), np.concatenate([y_train_pred, y_val_pred]), 'Train')
+        t_kl, t_rmlse = entropy_evaluation(model_choice.name, y_test, y_test_pred)
+
         result_dict = data_param.copy()
-        result_dict['kl'] = kl
-        result_dict['rmlse'] = rmlse
+        result_dict['train_rmse'] = train_rmse
+        result_dict['val_rmse'] = val_rmse
+        result_dict['test_rmse'] = test_rmse
+        result_dict['s_kl'] = s_kl
+        result_dict['s_rmlse'] = s_rmlse
+        result_dict['t_kl'] = t_kl
+        result_dict['t_rmlse'] = t_rmlse
         results.append(result_dict)
 
     res_df = pd.DataFrame(results)
-    res_df = res_df[['reducer_choice', 'n_components', 'kl', 'rmlse']]
-    res_df.sort_values(by='kl', inplace=True)
+    res_df = res_df[['reducer_choice', 'n_components', 'train_rmse', 'val_rmse', 'test_rmse', 's_kl', 's_rmlse'
+                     't_kl', 't_rmlse']]
+    res_df.sort_values(by='t_kl', inplace=True)
     res_df.to_csv(os.path.join(task_dir, 'results.csv'), index=False)
 
 
@@ -316,15 +327,13 @@ if __name__ == '__main__':
     parser.add_argument('--train_cities', required=True, default='bj', type=str)
     parser.add_argument('--test_cities', required=True, default='nb', type=str)
     parser.add_argument('--y_scale', action='store_true', help='std scale the target label')
-    parser.add_argument('--model_choice', default=0, type='int', help='model choice: 0 -> cnn, 1-> dense cnn',
+    parser.add_argument('--model_choice', default=0, type=int, help='model choice: 0 -> cnn, 1-> dense cnn',
                         choices=[0, 1])
     parser.add_argument('--epochs', default=100, type=int)
 
     args = parser.parse_args()
-    train_cities = args.train_cities.split(',')
-    test_cities = args.test_cities.split(',')
-    y_scale = args.y_scale
-    max_epochs = args.epochs
+    train_city = args.train_cities.split(',')
+    test_city = args.test_cities.split(',')
 
-    run(train_cities=train_cities, test_cities=test_cities, y_scale=y_scale, epochs=max_epochs,
-        model_choice=ModelChoice())
+    run(train_cities=train_city, test_cities=test_city, y_scale=args.y_scale, epochs=args.epochs,
+        model_choice=ModelChoice(args.model_choice))

@@ -25,7 +25,7 @@ def mse_evaluation(model_name, y_test, y_predict, label='Test'):
     print('Model %s Performance:' % (model_name,))
     print(label, 'MSE: ', mse)
     print(label, 'RMSE: ', rmse)
-    return mse, rmse
+    return rmse
 
 
 def entropy_evaluation(model_name, y_test, y_predict, label='Test', baseline_flag=False):
