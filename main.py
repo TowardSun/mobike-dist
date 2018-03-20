@@ -222,8 +222,8 @@ def run(train_cities, test_cities, window=5,
     :return:
     """
     config = tf.ConfigProto()
-    config.gpu_options.per_process_gpu_memory_fraction = 0.3
-    config.gpu_options.allow_growth = True
+    config.gpu_options.per_process_gpu_memory_fraction = 0.2
+    # config.gpu_options.allow_growth = True
 
     data_param_grid = dict(
         n_components=list(range(5, 31, 5)),
@@ -337,8 +337,10 @@ if __name__ == '__main__':
     parser.add_argument('--model_choice', default=0, type=int, help='model choice: 0 -> cnn, 1-> dense cnn',
                         choices=[0, 1])
     parser.add_argument('--epochs', default=100, type=int)
+    parser.add_argument('--gpu', default=0, type=int)
 
     args = parser.parse_args()
+    os.environ['CUDA_VISIBLE_DEVICES'] = str(args.gpu)
     train_city = args.train_cities.split(',')
     test_city = args.test_cities.split(',')
 
