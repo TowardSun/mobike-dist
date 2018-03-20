@@ -23,7 +23,6 @@ from models.dense_conv import DenseConvModel
 import os
 import keras.backend as K
 
-
 logger = logging.getLogger(__name__)
 logging.basicConfig(
     level=logging.INFO,
@@ -66,7 +65,7 @@ def transform_2_conv(lat_steps, lng_steps, x, y, size):
 
 
 def build_model(input_shape=(5, 5, 2), model_choice=ModelChoice.cnn, lr=0.001, dropout=0.5,
-                first_filter=6, nb_dense_block_layers=(6, ), growth_rate=6, compression=0.5):
+                first_filter=6, nb_dense_block_layers=(6,), growth_rate=6, compression=0.5):
     if model_choice not in (ModelChoice.cnn, ModelChoice.dense_cnn):
         raise ValueError('not valid model choice')
 
@@ -93,6 +92,7 @@ def build_cnn_model(input_shape=(5, 5, 2), dropout=0.5, lr=0.001):
     :return:
     """
     inputs = Input(shape=input_shape)
+    # layer = Conv2D(10, kernel_size=(5, 5), activation='relu')(inputs)
     layer = Conv2D(16, kernel_size=(3, 3), activation='relu', padding='same')(inputs)
     layer = Conv2D(32, kernel_size=(3, 3), activation='relu')(layer)
     layer = Flatten()(layer)
@@ -196,7 +196,7 @@ def get_train_val_test(train_cities, test_cities, window=5, reducer_choice=None,
 
     # transform into conv data
     x_train, y_train = get_conv_data(train_cities, x_train, y_train, window, filter_count=1)
-    x_test, y_test = get_conv_data(test_cities, x_test, y_test, window, filter_count=0)
+    x_test, y_test = get_conv_data(test_cities, x_test, y_test, window, filter_count=1)
 
     # scale the target y
     y_scaler = StandardScaler().fit(y_train[:, np.newaxis])
@@ -208,12 +208,14 @@ def get_train_val_test(train_cities, test_cities, window=5, reducer_choice=None,
     return x_train, x_val, x_test, y_train, y_val, y_test, y_scaler
 
 
-def run(train_cities, test_cities, window=5,
+def run(train_cities, test_cities, data_param_grid, model_param_dict, window=5,
         model_choice=ModelChoice.cnn, epochs=40, y_scale=False, early_stopping=True, early_stop_epoch=10):
     """
     main entrance to run the model
     :param train_cities: train cities' names
     :param test_cities: test cities' names
+    :param data_param_grid: data grid search config
+    :param model_param_dict: model grid search config
     :param window: neighbor window size
     :param model_choice: cnn model choice, simple cnn | dense net | res net
     :param epochs: max fit epochs
@@ -227,23 +229,6 @@ def run(train_cities, test_cities, window=5,
     config.gpu_options.allow_growth = True
     K.set_session(tf.Session(config=config))
 
-    data_param_grid = dict(
-        n_components=list(range(5, 31, 5)),
-        reducer_choice=[ReducerChoice.pca, ReducerChoice.fa, ReducerChoice.tca]
-    )
-    model_param_dict = {
-        ModelChoice.cnn: dict(
-            lr=[0.001, 0.0001],
-            dropout=[0.2, 0.5]
-        ),
-        ModelChoice.dense_cnn: dict(
-            lr=[0.001, 0.0001],
-            dropout=[0.2, 0.5],
-            first_filter=[16],
-            nb_dense_block_layers=[(4,)],
-            growth_rate=[6], compression=[0.5]
-        )
-    }
     model_param_grid = model_param_dict[model_choice]
     candidate_data_params = list(ParameterGrid(param_grid=data_param_grid))
     candidate_model_params = list(ParameterGrid(param_grid=model_param_grid))
@@ -253,6 +238,7 @@ def run(train_cities, test_cities, window=5,
     if not os.path.exists(task_dir):
         os.mkdir(task_dir)
 
+    result_file_path = './results/s_' + '_'.join(train_cities) + '_t_' + '_'.join(test_cities) + '.csv'
     for i, data_param in enumerate(candidate_data_params):
         logger.info('Data config: %s' % data_param)
         x_train, x_val, x_test, y_train, y_val, y_test, y_scaler = get_train_val_test(
@@ -274,7 +260,7 @@ def run(train_cities, test_cities, window=5,
             for k in range(epochs):
                 print('\nEpoch %s/%s' % (k + 1, epochs))
                 history = nn_model.fit(
-                    x_train, y_train, validation_data=(x_val, y_val), batch_size=32, epochs=1, verbose=2).history
+                    x_train, y_train, validation_data=(x_test, y_test), batch_size=32, epochs=1, verbose=2).history
                 for key, value in history.items():
                     history_dict[key].append(value[-1])
 
@@ -315,6 +301,7 @@ def run(train_cities, test_cities, window=5,
         t_kl, t_rmlse = entropy_evaluation(model_choice.name, y_test, y_test_pred)
 
         result_dict = data_param.copy()
+        result_dict['model_choice'] = model_choice.name
         result_dict['train_rmse'] = train_rmse
         result_dict['val_rmse'] = val_rmse
         result_dict['test_rmse'] = test_rmse
@@ -322,23 +309,68 @@ def run(train_cities, test_cities, window=5,
         result_dict['s_rmlse'] = s_rmlse
         result_dict['t_kl'] = t_kl
         result_dict['t_rmlse'] = t_rmlse
+        result_dict['model_path'] = data_best_model_path
+        logger.info(str(result_dict))
         results.append(result_dict)
 
-        res_df = pd.DataFrame(results)
-        res_df = res_df[['reducer_choice', 'n_components', 'train_rmse', 'val_rmse', 'test_rmse', 's_kl', 's_rmlse',
-                         't_kl', 't_rmlse']]
-        res_df.sort_values(by='t_kl', inplace=True)
-        res_df.to_csv(os.path.join(task_dir, 'results.csv'), index=False)
+    if os.path.exists(result_file_path):
+        old_res_df = pd.read_csv(result_file_path)
+        new_res_df = pd.DataFrame(results)
+        new_res_df = pd.concat([old_res_df, new_res_df])
+    else:
+        new_res_df = pd.DataFrame(results)
+        new_res_df = new_res_df[
+            ['model_choice', 'reducer_choice', 'n_components', 'train_rmse', 'val_rmse', 'test_rmse', 's_kl', 's_rmlse',
+             't_kl', 't_rmlse', 'model_path']
+        ]
+        new_res_df.sort_values(by='t_kl', inplace=True)
+    new_res_df.to_csv(result_file_path, index=False)
 
 
 if __name__ == '__main__':
+    data_param_config = dict(
+        n_components=list(range(2, 31, 4)),
+        reducer_choice=[ReducerChoice.pca, ReducerChoice.fa, ReducerChoice.tca]
+    )
+    model_param_config = {
+        ModelChoice.cnn: dict(
+            lr=[0.001, 0.0001],
+            dropout=[0.2, 0.5]
+        ),
+        ModelChoice.dense_cnn: dict(
+            lr=[0.001, 0.0001],
+            dropout=[0.2, 0.5],
+            first_filter=[16],
+            nb_dense_block_layers=[(4,)],
+            growth_rate=[6], compression=[0.5]
+        )
+    }
+
+    # data_param_config = dict(
+    #     n_components=[10],
+    #     reducer_choice=[ReducerChoice.fa]
+    # )
+    # model_param_config = {
+    #     ModelChoice.cnn: dict(
+    #         lr=[0.001],
+    #         dropout=[0.5]
+    #     ),
+    #     ModelChoice.dense_cnn: dict(
+    #         lr=[0.001],
+    #         dropout=[0.2],
+    #         first_filter=[16],
+    #         nb_dense_block_layers=[(4,)],
+    #         growth_rate=[6], compression=[0.5]
+    #     )
+    # }
+
     parser = argparse.ArgumentParser(description='mobike dist')
     parser.add_argument('--train_cities', required=True, default='bj', type=str)
     parser.add_argument('--test_cities', required=True, default='nb', type=str)
     parser.add_argument('--y_scale', action='store_true', help='std scale the target label')
     parser.add_argument('--model_choice', default=0, type=int, help='model choice: 0 -> cnn, 1-> dense cnn',
                         choices=[0, 1])
-    parser.add_argument('--epochs', default=100, type=int)
+    parser.add_argument('--epochs', default=200, type=int)
     parser.add_argument('--gpu', default=0, type=int)
 
     args = parser.parse_args()
@@ -348,3 +380,8 @@ if __name__ == '__main__':
 
     run(train_cities=train_city, test_cities=test_city, y_scale=args.y_scale, epochs=args.epochs,
         model_choice=ModelChoice(args.model_choice))
+
+    # run(train_cities=('sh', ), test_cities=('nb',), data_param_grid=data_param_config,
+    #     model_param_dict=model_param_config,
+    #     y_scale=False, epochs=100,
+    #     model_choice=ModelChoice.cnn)
