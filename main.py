@@ -378,7 +378,7 @@ if __name__ == '__main__':
     train_city = args.train_cities.split(',')
     test_city = args.test_cities.split(',')
 
-    run(train_cities=train_city, test_cities=test_city, y_scale=args.y_scale, epochs=args.epochs,
+    run(train_cities=train_city, test_cities=test_city,data_param_grid=data_param_config, model_param_dict=model_param_config,  y_scale=args.y_scale, epochs=args.epochs,
         model_choice=ModelChoice(args.model_choice))
 
     # run(train_cities=('sh', ), test_cities=('nb',), data_param_grid=data_param_config,
