@@ -301,7 +301,9 @@ def run(train_cities, test_cities, data_param_grid, model_param_dict, window=5,
         t_kl, t_rmlse = entropy_evaluation(model_choice.name, y_test, y_test_pred)
 
         result_dict = data_param.copy()
+        result_dict['reducer_choice'] = result_dict['reducer_choice'].name
         result_dict['model_choice'] = model_choice.name
+        result_dict['y_scale'] = y_scale
         result_dict['train_rmse'] = train_rmse
         result_dict['val_rmse'] = val_rmse
         result_dict['test_rmse'] = test_rmse
@@ -319,11 +321,11 @@ def run(train_cities, test_cities, data_param_grid, model_param_dict, window=5,
         new_res_df = pd.concat([old_res_df, new_res_df])
     else:
         new_res_df = pd.DataFrame(results)
-        new_res_df = new_res_df[
-            ['model_choice', 'reducer_choice', 'n_components', 'train_rmse', 'val_rmse', 'test_rmse', 's_kl', 's_rmlse',
-             't_kl', 't_rmlse', 'model_path']
-        ]
-        new_res_df.sort_values(by='t_kl', inplace=True)
+    new_res_df = new_res_df[
+        ['model_choice', 'reducer_choice', 'n_components', 'y_scale', 'train_rmse', 'val_rmse', 'test_rmse', 's_kl', 's_rmlse',
+         't_kl', 't_rmlse', 'model_path']
+    ]
+    new_res_df.sort_values(by='t_kl', inplace=True)
     new_res_df.to_csv(result_file_path, index=False)
 
 
