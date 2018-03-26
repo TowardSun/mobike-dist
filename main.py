@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
 
-import datetime
 import logging
 import pandas as pd
 import tensorflow as tf
@@ -21,6 +20,7 @@ from evaluation.metrics import *
 from models import DenseConvModel, conv_block
 import os
 import keras.backend as K
+import uuid
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
@@ -244,7 +244,7 @@ def run(train_cities, test_cities, data_param_grid, model_param_dict, window=5,
     # make log dir
     if not os.path.exists(LOG_DIR):
         os.mkdir(LOG_DIR)
-    task_dir = os.path.join('./logs', datetime.datetime.now().strftime('%m%d%H%M%S'))
+    task_dir = os.path.join('./logs', str(uuid.uuid1()) + '.h5')
     if not os.path.exists(task_dir):
         os.mkdir(task_dir)
 
