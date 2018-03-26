@@ -126,10 +126,10 @@ CITY_BLOCK_DICT = {
 
 
 FEATURE_DICT = {
+    FeatureChoice.all: FEATURES,
     FeatureChoice.poi: POI_FEATURES,
     FeatureChoice.street: STREET_FEATURES,
-    FeatureChoice.engineer: ENGINEER_FEATURES,
-    FeatureChoice.all: FEATURES
+    FeatureChoice.engineer: ENGINEER_FEATURES
 }
 
 LOG_DIR = './logs'
