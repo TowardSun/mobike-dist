@@ -6,10 +6,9 @@ PATH_PATTERN = './data/%s_mobike_grid_week_0717_0721_street_std_mean_1000_1000.c
 
 POI_FEATURES = ['food', 'hotel', 'shopping', 'life_service', 'beauty', 'tourist', 'entertainment', 'sports',
                 'education', 'culture_media', 'medical', 'car_service', 'transportation', 'finance', 'estate',
-                'company', 'government']
+                'company', 'government', 'num_pois', 'poi_entropy']
 
 ENGINEER_FEATURES = ['light', 'light_dis',
-                     'num_pois', 'poi_entropy', 'num_highway', 'num_railway', 'highway_entropy',
                      'subway_dis', 'shop_center_dis', 'shop_center_level']
 
 STREET_FEATURES = ['highway-bridleway', 'highway-cycleway', 'highway-footway', 'highway-living_street',
@@ -22,7 +21,7 @@ STREET_FEATURES = ['highway-bridleway', 'highway-cycleway', 'highway-footway', '
                    'railway-disused', 'railway-funicular', 'railway-light_rail',
                    'railway-monorail', 'railway-narrow_gauge',
                    'railway-preserved', 'railway-rail',
-                   'railway-subway', 'railway-tram']
+                   'railway-subway', 'railway-tram', 'num_highway', 'num_railway', 'highway_entropy']
 
 FEATURES = POI_FEATURES + ENGINEER_FEATURES + STREET_FEATURES
 TARGET = 'mobike'

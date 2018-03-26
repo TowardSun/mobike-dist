@@ -19,7 +19,7 @@ from decomposition import TCA
 from sklearn.model_selection import ParameterGrid
 from const import *
 from evaluation.metrics import *
-from models.dense_conv import DenseConvModel
+from models import DenseConvModel, conv_block
 import os
 import keras.backend as K
 
@@ -93,8 +93,10 @@ def build_cnn_model(input_shape=(5, 5, 2), dropout=0.5, lr=0.001):
     """
     inputs = Input(shape=input_shape)
     # layer = Conv2D(10, kernel_size=(5, 5), activation='relu')(inputs)
-    layer = Conv2D(16, kernel_size=(3, 3), activation='relu', padding='same')(inputs)
-    layer = Conv2D(32, kernel_size=(3, 3), activation='relu')(layer)
+    layer = conv_block(inputs, filters=16, kernel_size=(1, 1), padding='valid', dropout_rate=dropout, conv_first=True)
+    layer = conv_block(layer, filters=32, kernel_size=(3, 3), padding='same', dropout_rate=dropout, conv_first=True)
+    layer = conv_block(layer, filters=16, kernel_size=(1, 1), padding='valid', dropout_rate=dropout, conv_first=True)
+    layer = conv_block(layer, filters=32, kernel_size=(3, 3), padding='valid', dropout_rate=dropout, conv_first=True)
     layer = Flatten()(layer)
 
     layer = Dense(32)(layer)
@@ -238,7 +240,7 @@ def run(train_cities, test_cities, data_param_grid, model_param_dict, window=5,
     if not os.path.exists(task_dir):
         os.mkdir(task_dir)
 
-    result_file_path = './results/s_' + '_'.join(train_cities) + '_t_' + '_'.join(test_cities) + '.csv'
+    result_file_path = './results/s_' + '_'.join(train_cities) + '_t_' + '_'.join(test_cities) + '_new.csv'
     for i, data_param in enumerate(candidate_data_params):
         logger.info('Data config: %s' % data_param)
         x_train, x_val, x_test, y_train, y_val, y_test, y_scaler = get_train_val_test(
@@ -322,7 +324,8 @@ def run(train_cities, test_cities, data_param_grid, model_param_dict, window=5,
     else:
         new_res_df = pd.DataFrame(results)
     new_res_df = new_res_df[
-        ['model_choice', 'reducer_choice', 'n_components', 'y_scale', 'train_rmse', 'val_rmse', 'test_rmse', 's_kl', 's_rmlse',
+        ['model_choice', 'reducer_choice', 'n_components', 'y_scale', 'train_rmse', 'val_rmse', 'test_rmse', 's_kl',
+         's_rmlse',
          't_kl', 't_rmlse', 'model_path']
     ]
     new_res_df.sort_values(by='t_kl', inplace=True)
@@ -330,60 +333,66 @@ def run(train_cities, test_cities, data_param_grid, model_param_dict, window=5,
 
 
 if __name__ == '__main__':
-    data_param_config = dict(
-        n_components=list(range(2, 31, 4)),
-        reducer_choice=[ReducerChoice.pca, ReducerChoice.fa, ReducerChoice.tca]
-    )
-    model_param_config = {
-        ModelChoice.cnn: dict(
-            lr=[0.001, 0.0001],
-            dropout=[0.2, 0.5]
-        ),
-        ModelChoice.dense_cnn: dict(
-            lr=[0.001, 0.0001],
-            dropout=[0.2, 0.5],
-            first_filter=[16],
-            nb_dense_block_layers=[(4,)],
-            growth_rate=[6], compression=[0.5]
-        )
-    }
-
     # data_param_config = dict(
-    #     n_components=[10],
-    #     reducer_choice=[ReducerChoice.fa]
+    #     n_components=list(range(2, 31, 4)),
+    #     reducer_choice=[ReducerChoice.pca, ReducerChoice.fa]
     # )
     # model_param_config = {
     #     ModelChoice.cnn: dict(
-    #         lr=[0.001],
-    #         dropout=[0.5]
+    #         lr=[0.001, 0.0001],
+    #         dropout=[0.2, 0.5]
     #     ),
     #     ModelChoice.dense_cnn: dict(
-    #         lr=[0.001],
-    #         dropout=[0.2],
+    #         lr=[0.001, 0.0001],
+    #         dropout=[0.2, 0.5],
     #         first_filter=[16],
     #         nb_dense_block_layers=[(4,)],
     #         growth_rate=[6], compression=[0.5]
     #     )
     # }
 
-    parser = argparse.ArgumentParser(description='mobike dist')
-    parser.add_argument('--train_cities', required=True, default='bj', type=str)
-    parser.add_argument('--test_cities', required=True, default='nb', type=str)
-    parser.add_argument('--y_scale', action='store_true', help='std scale the target label')
-    parser.add_argument('--model_choice', default=0, type=int, help='model choice: 0 -> cnn, 1-> dense cnn',
-                        choices=[0, 1])
-    parser.add_argument('--epochs', default=200, type=int)
-    parser.add_argument('--gpu', default=0, type=int)
+    data_param_config = dict(
+        n_components=[10, 20],
+        reducer_choice=[ReducerChoice.fa]
+    )
+    model_param_config = {
+        ModelChoice.cnn: dict(
+            lr=[0.001],
+            dropout=[0.5]
+        ),
+        ModelChoice.dense_cnn: dict(
+            lr=[0.001],
+            dropout=[0.2],
+            first_filter=[16],
+            nb_dense_block_layers=[(4,)],
+            growth_rate=[6], compression=[0.5]
+        )
+    }
 
-    args = parser.parse_args()
-    os.environ['CUDA_VISIBLE_DEVICES'] = str(args.gpu)
-    train_city = args.train_cities.split(',')
-    test_city = args.test_cities.split(',')
-
-    run(train_cities=train_city, test_cities=test_city,data_param_grid=data_param_config, model_param_dict=model_param_config,  y_scale=args.y_scale, epochs=args.epochs,
-        model_choice=ModelChoice(args.model_choice))
-
-    # run(train_cities=('sh', ), test_cities=('nb',), data_param_grid=data_param_config,
-    #     model_param_dict=model_param_config,
-    #     y_scale=False, epochs=100,
-    #     model_choice=ModelChoice.cnn)
+    # parser = argparse.ArgumentParser(description='mobike dist')
+    # parser.add_argument('--train_cities', required=True, default='bj', type=str)
+    # parser.add_argument('--test_cities', required=True, default='nb', type=str)
+    run(
+        train_cities=('sh', ), test_cities=('nb',), data_param_grid=data_param_config,
+        model_param_dict=model_param_config,
+        y_scale=False, epochs=100,
+        model_choice=ModelChoice.cnn
+    )
+    run(
+        train_cities=('bj', ), test_cities=('nb',), data_param_grid=data_param_config,
+        model_param_dict=model_param_config,
+        y_scale=True, epochs=100,
+        model_choice=ModelChoice.cnn
+    )
+    run(
+        train_cities=('bj', ), test_cities=('nb',), data_param_grid=data_param_config,
+        model_param_dict=model_param_config,
+        y_scale=False, epochs=100,
+        model_choice=ModelChoice.dense_cnn
+    )
+    run(
+        train_cities=('bj', ), test_cities=('nb',), data_param_grid=data_param_config,
+        model_param_dict=model_param_config,
+        y_scale=True, epochs=100,
+        model_choice=ModelChoice.dense_cnn
+    )
