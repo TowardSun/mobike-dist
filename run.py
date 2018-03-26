@@ -9,7 +9,7 @@ from main import run
 if __name__ == '__main__':
     data_param_config = dict(
         n_components=list(range(2, 31, 4)),
-        reducer_choice=[ReducerChoice.pca, ReducerChoice.fa, ReducerChoice.tca]
+        reducer_choice=[ReducerChoice.pca, ReducerChoice.fa]
     )
     model_param_config = {
         ModelChoice.cnn: dict(
