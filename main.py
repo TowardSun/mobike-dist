@@ -3,11 +3,9 @@
 
 import datetime
 import logging
-from enum import IntEnum
-import argparse
 import pandas as pd
 import tensorflow as tf
-from keras.layers import Input, Dense, Conv2D, Flatten, Dropout, BatchNormalization, Activation
+from keras.layers import Input, Dense, Flatten, Dropout, BatchNormalization, Activation
 from keras.models import Model
 from keras.models import load_model
 from keras.optimizers import Adam
@@ -17,7 +15,8 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from decomposition import TCA
 from sklearn.model_selection import ParameterGrid
-from const import *
+from const import ModelChoice, CITY_BLOCK_DICT, FeatureChoice, ReducerChoice, PATH_PATTERN, TARGET, FEATURE_DICT
+from const import LOG_DIR
 from evaluation.metrics import *
 from models import DenseConvModel, conv_block
 import os
@@ -28,17 +27,6 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
-
-
-class ModelChoice(IntEnum):
-    cnn = 0
-    dense_cnn = 1
-
-
-class ReducerChoice(IntEnum):
-    fa = 0
-    pca = 1
-    tca = 2
 
 
 def transform_2_conv(lat_steps, lng_steps, x, y, size):
@@ -131,8 +119,8 @@ def get_conv_data(cities, x, y, window, filter_count=1):
     conv_xs = []
     conv_ys = []
     for city in cities:
-        assert city in city_block_dict
-        lat_steps, lng_steps, _ = city_block_dict[city]
+        assert city in CITY_BLOCK_DICT
+        lat_steps, lng_steps, _ = CITY_BLOCK_DICT[city]
         samples = lat_steps * lng_steps
 
         city_x = x[start_index: start_index + samples, :]
@@ -149,15 +137,16 @@ def get_conv_data(cities, x, y, window, filter_count=1):
     return np.vstack(conv_xs), np.concatenate(conv_ys)
 
 
-def get_train_val_test(train_cities, test_cities, window=5, reducer_choice=None,
+def get_train_val_test(train_cities, test_cities, features, window=5, reducer_choice=None,
                        n_components=2, y_scale=False):
     """
     Get train, validation set from train cities,
     get test set from test cities
     :param train_cities:
     :param test_cities:
+    :param features: feature names
     :param window:
-    :param n_components:
+    :param n_components: reduced dimension
     :param reducer_choice: Factor Analysis | PCA | TCA
     :param y_scale:
     :return:
@@ -168,10 +157,10 @@ def get_train_val_test(train_cities, test_cities, window=5, reducer_choice=None,
     test_dfs = [pd.read_csv(PATH_PATTERN % city) for city in test_cities]
     test_df = pd.concat(test_dfs)
 
-    x_train = train_df[FEATURES].values
+    x_train = train_df[features].values
     y_train = train_df[TARGET].values
 
-    x_test = test_df[FEATURES].values
+    x_test = test_df[features].values
     y_test = test_df[TARGET].values
 
     if reducer_choice == ReducerChoice.pca:
@@ -210,8 +199,29 @@ def get_train_val_test(train_cities, test_cities, window=5, reducer_choice=None,
     return x_train, x_val, x_test, y_train, y_val, y_test, y_scaler
 
 
+def write_results(result_file_path, results):
+    columns = [
+        'model_choice', 'feature_choice', 'reducer_choice', 'n_components', 'y_scale',
+        'train_rmse', 'val_rmse', 'test_rmse', 's_kl', 's_rmlse',
+        't_kl', 't_rmlse', 'model_path'
+    ]
+    if os.path.exists(result_file_path):
+        old_res_df = pd.read_csv(result_file_path)
+        new_columns = [x for x in list(old_res_df) if x not in columns]
+        for new_col in new_columns:
+            old_res_df[new_col] = None
+        new_res_df = pd.DataFrame(results)
+        new_res_df = pd.concat([old_res_df, new_res_df])
+    else:
+        new_res_df = pd.DataFrame(results)
+    new_res_df = new_res_df[columns]
+    new_res_df.sort_values(by='t_kl', inplace=True)
+    new_res_df.to_csv(result_file_path, index=False)
+
+
 def run(train_cities, test_cities, data_param_grid, model_param_dict, window=5,
-        model_choice=ModelChoice.cnn, epochs=40, y_scale=False, early_stopping=True, early_stop_epoch=10):
+        model_choice=ModelChoice.cnn, feature_choice=FeatureChoice.all, epochs=40, y_scale=False, early_stopping=True,
+        early_stop_epoch=10):
     """
     main entrance to run the model
     :param train_cities: train cities' names
@@ -220,6 +230,7 @@ def run(train_cities, test_cities, data_param_grid, model_param_dict, window=5,
     :param model_param_dict: model grid search config
     :param window: neighbor window size
     :param model_choice: cnn model choice, simple cnn | dense net | res net
+    :param feature_choice: multi-source feature selection
     :param epochs: max fit epochs
     :param y_scale: whether scale the target y
     :param early_stopping: whether early stopping
@@ -227,24 +238,28 @@ def run(train_cities, test_cities, data_param_grid, model_param_dict, window=5,
     :return:
     """
     config = tf.ConfigProto()
-    # config.gpu_options.per_process_gpu_memory_fraction = 0.2
     config.gpu_options.allow_growth = True
     K.set_session(tf.Session(config=config))
 
-    model_param_grid = model_param_dict[model_choice]
-    candidate_data_params = list(ParameterGrid(param_grid=data_param_grid))
-    candidate_model_params = list(ParameterGrid(param_grid=model_param_grid))
-    results = []
-
+    # make log dir
+    if not os.path.exists(LOG_DIR):
+        os.mkdir(LOG_DIR)
     task_dir = os.path.join('./logs', datetime.datetime.now().strftime('%m%d%H%M%S'))
     if not os.path.exists(task_dir):
         os.mkdir(task_dir)
 
-    result_file_path = './results/s_' + '_'.join(train_cities) + '_t_' + '_'.join(test_cities) + '_new.csv'
+    model_param_grid = model_param_dict[model_choice]
+    features = FEATURE_DICT[feature_choice]
+    candidate_data_params = list(ParameterGrid(param_grid=data_param_grid))
+    candidate_model_params = list(ParameterGrid(param_grid=model_param_grid))
+    results = []
+
+    result_file_path = './results/s_%s_t_%s_%s.csv' % (
+        '_'.join(train_cities), '_'.join(test_cities), feature_choice.name)
     for i, data_param in enumerate(candidate_data_params):
         logger.info('Data config: %s' % data_param)
         x_train, x_val, x_test, y_train, y_val, y_test, y_scaler = get_train_val_test(
-            train_cities, test_cities, window, y_scale=y_scale, **data_param)
+            train_cities, test_cities, features, window, y_scale=y_scale, **data_param)
 
         data_best_loss = np.inf
         data_best_model_path = ''
@@ -304,6 +319,7 @@ def run(train_cities, test_cities, data_param_grid, model_param_dict, window=5,
 
         result_dict = data_param.copy()
         result_dict['reducer_choice'] = result_dict['reducer_choice'].name
+        result_dict['feature_choice'] = feature_choice.name
         result_dict['model_choice'] = model_choice.name
         result_dict['y_scale'] = y_scale
         result_dict['train_rmse'] = train_rmse
@@ -317,40 +333,10 @@ def run(train_cities, test_cities, data_param_grid, model_param_dict, window=5,
         logger.info(str(result_dict))
         results.append(result_dict)
 
-    if os.path.exists(result_file_path):
-        old_res_df = pd.read_csv(result_file_path)
-        new_res_df = pd.DataFrame(results)
-        new_res_df = pd.concat([old_res_df, new_res_df])
-    else:
-        new_res_df = pd.DataFrame(results)
-    new_res_df = new_res_df[
-        ['model_choice', 'reducer_choice', 'n_components', 'y_scale', 'train_rmse', 'val_rmse', 'test_rmse', 's_kl',
-         's_rmlse',
-         't_kl', 't_rmlse', 'model_path']
-    ]
-    new_res_df.sort_values(by='t_kl', inplace=True)
-    new_res_df.to_csv(result_file_path, index=False)
+    write_results(result_file_path, results)
 
 
 if __name__ == '__main__':
-    # data_param_config = dict(
-    #     n_components=list(range(2, 31, 4)),
-    #     reducer_choice=[ReducerChoice.pca, ReducerChoice.fa]
-    # )
-    # model_param_config = {
-    #     ModelChoice.cnn: dict(
-    #         lr=[0.001, 0.0001],
-    #         dropout=[0.2, 0.5]
-    #     ),
-    #     ModelChoice.dense_cnn: dict(
-    #         lr=[0.001, 0.0001],
-    #         dropout=[0.2, 0.5],
-    #         first_filter=[16],
-    #         nb_dense_block_layers=[(4,)],
-    #         growth_rate=[6], compression=[0.5]
-    #     )
-    # }
-
     data_param_config = dict(
         n_components=[10, 20],
         reducer_choice=[ReducerChoice.fa]
@@ -369,30 +355,29 @@ if __name__ == '__main__':
         )
     }
 
-    # parser = argparse.ArgumentParser(description='mobike dist')
-    # parser.add_argument('--train_cities', required=True, default='bj', type=str)
-    # parser.add_argument('--test_cities', required=True, default='nb', type=str)
     run(
-        train_cities=('sh', ), test_cities=('nb',), data_param_grid=data_param_config,
+        train_cities=('sh',), test_cities=('nb',), data_param_grid=data_param_config,
+        feature_choice=FeatureChoice.poi,
         model_param_dict=model_param_config,
         y_scale=False, epochs=100,
         model_choice=ModelChoice.cnn
     )
-    run(
-        train_cities=('bj', ), test_cities=('nb',), data_param_grid=data_param_config,
-        model_param_dict=model_param_config,
-        y_scale=True, epochs=100,
-        model_choice=ModelChoice.cnn
-    )
-    run(
-        train_cities=('bj', ), test_cities=('nb',), data_param_grid=data_param_config,
-        model_param_dict=model_param_config,
-        y_scale=False, epochs=100,
-        model_choice=ModelChoice.dense_cnn
-    )
-    run(
-        train_cities=('bj', ), test_cities=('nb',), data_param_grid=data_param_config,
-        model_param_dict=model_param_config,
-        y_scale=True, epochs=100,
-        model_choice=ModelChoice.dense_cnn
-    )
+
+    # run(
+    #     train_cities=('bj', ), test_cities=('nb',), data_param_grid=data_param_config,
+    #     model_param_dict=model_param_config,
+    #     y_scale=True, epochs=100,
+    #     model_choice=ModelChoice.cnn
+    # )
+    # run(
+    #     train_cities=('bj', ), test_cities=('nb',), data_param_grid=data_param_config,
+    #     model_param_dict=model_param_config,
+    #     y_scale=False, epochs=100,
+    #     model_choice=ModelChoice.dense_cnn
+    # )
+    # run(
+    #     train_cities=('bj', ), test_cities=('nb',), data_param_grid=data_param_config,
+    #     model_param_dict=model_param_config,
+    #     y_scale=True, epochs=100,
+    #     model_choice=ModelChoice.dense_cnn
+    # )

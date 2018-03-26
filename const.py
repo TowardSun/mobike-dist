@@ -1,30 +1,25 @@
 # -*- coding: utf-8 -*-
 
 import math
+from enum import IntEnum
 
-PATH_PATTERN = './data/%s_mobike_grid_week_0717_0721_street_std_mean_1000_1000.csv'
 
-POI_FEATURES = ['food', 'hotel', 'shopping', 'life_service', 'beauty', 'tourist', 'entertainment', 'sports',
-                'education', 'culture_media', 'medical', 'car_service', 'transportation', 'finance', 'estate',
-                'company', 'government', 'num_pois', 'poi_entropy']
+class ModelChoice(IntEnum):
+    cnn = 0
+    dense_cnn = 1
 
-ENGINEER_FEATURES = ['light', 'light_dis',
-                     'subway_dis', 'shop_center_dis', 'shop_center_level']
 
-STREET_FEATURES = ['highway-bridleway', 'highway-cycleway', 'highway-footway', 'highway-living_street',
-                   'highway-motorway', 'highway-motorway_link', 'highway-path',
-                   'highway-pedestrian', 'highway-primary', 'highway-primary_link', 'highway-raceway',
-                   'highway-residential', 'highway-road', 'highway-secondary', 'highway-secondary_link',
-                   'highway-service', 'highway-steps', 'highway-tertiary', 'highway-tertiary_link',
-                   'highway-track', 'highway-trunk', 'highway-trunk_link', 'highway-unclassified',
-                   'man_made-pier',
-                   'railway-disused', 'railway-funicular', 'railway-light_rail',
-                   'railway-monorail', 'railway-narrow_gauge',
-                   'railway-preserved', 'railway-rail',
-                   'railway-subway', 'railway-tram', 'num_highway', 'num_railway', 'highway_entropy']
+class ReducerChoice(IntEnum):
+    fa = 0
+    pca = 1
+    tca = 2
 
-FEATURES = POI_FEATURES + ENGINEER_FEATURES + STREET_FEATURES
-TARGET = 'mobike'
+
+class FeatureChoice(IntEnum):
+    poi = 0
+    street = 1
+    engineer = 2
+    all = 3
 
 
 class Location:
@@ -98,8 +93,43 @@ def get_nb_range(width=0.01, height=0.01):
     return lat_steps, lng_steps, nb_block
 
 
-city_block_dict = {
+PATH_PATTERN = './data/%s_mobike_grid_week_0717_0721_street_std_mean_1000_1000.csv'
+
+POI_FEATURES = ['food', 'hotel', 'shopping', 'life_service', 'beauty', 'tourist', 'entertainment', 'sports',
+                'education', 'culture_media', 'medical', 'car_service', 'transportation', 'finance', 'estate',
+                'company', 'government', 'num_pois', 'poi_entropy']
+
+ENGINEER_FEATURES = ['light', 'light_dis',
+                     'subway_dis', 'shop_center_dis', 'shop_center_level']
+
+STREET_FEATURES = ['highway-bridleway', 'highway-cycleway', 'highway-footway', 'highway-living_street',
+                   'highway-motorway', 'highway-motorway_link', 'highway-path',
+                   'highway-pedestrian', 'highway-primary', 'highway-primary_link', 'highway-raceway',
+                   'highway-residential', 'highway-road', 'highway-secondary', 'highway-secondary_link',
+                   'highway-service', 'highway-steps', 'highway-tertiary', 'highway-tertiary_link',
+                   'highway-track', 'highway-trunk', 'highway-trunk_link', 'highway-unclassified',
+                   'man_made-pier',
+                   'railway-disused', 'railway-funicular', 'railway-light_rail',
+                   'railway-monorail', 'railway-narrow_gauge',
+                   'railway-preserved', 'railway-rail',
+                   'railway-subway', 'railway-tram', 'num_highway', 'num_railway', 'highway_entropy']
+
+FEATURES = POI_FEATURES + ENGINEER_FEATURES + STREET_FEATURES
+TARGET = 'mobike'
+
+
+CITY_BLOCK_DICT = {
     'sh': get_sh_range(),
     'bj': get_bj_range(),
     'nb': get_nb_range()
 }
+
+
+FEATURE_DICT = {
+    FeatureChoice.poi: POI_FEATURES,
+    FeatureChoice.street: STREET_FEATURES,
+    FeatureChoice.engineer: ENGINEER_FEATURES,
+    FeatureChoice.all: FEATURES
+}
+
+LOG_DIR = './logs'
