@@ -2,3 +2,4 @@
 *.h5
 .idea/
 logs/
+experiment/.ipynb_checkpoints
