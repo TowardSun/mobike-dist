@@ -28,7 +28,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='mobike dist')
     parser.add_argument('--train_cities', required=True, default='bj', type=str)
     parser.add_argument('--test_cities', required=True, default='nb', type=str)
-    parser.add_argument('--feature_choice', default=0, type='int',
+    parser.add_argument('--feature_choice', default=0, type=int,
                         help='feature choice: 0 -> all, 1 -> poi feature, 2 -> street features, 3 -> engineer features')
     parser.add_argument('--y_scale', action='store_true', help='whether z-score the target label')
     parser.add_argument('--model_choice', default=0, type=int, help='model choice: 0 -> cnn, 1-> dense cnn',
