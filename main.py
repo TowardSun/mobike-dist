@@ -257,6 +257,9 @@ def run(train_cities, test_cities, data_param_grid, model_param_dict, window=5,
     result_file_path = './results/s_%s_t_%s_%s_%s_%s.csv' % (
         '_'.join(train_cities), '_'.join(test_cities), model_choice.name, feature_choice.name, str(y_scale))
     for i, data_param in enumerate(candidate_data_params):
+        if data_param['n_components'] > len(features):
+            continue
+
         logger.info('Data config: %s' % data_param)
         x_train, x_val, x_test, y_train, y_val, y_test, y_scaler = get_train_val_test(
             train_cities, test_cities, features, window, y_scale=y_scale, **data_param)
