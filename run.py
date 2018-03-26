@@ -2,7 +2,7 @@
 
 import argparse
 import os
-from const import ModelChoice, ReducerChoice
+from const import ModelChoice, ReducerChoice, FeatureChoice
 from main import run
 
 
@@ -28,7 +28,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='mobike dist')
     parser.add_argument('--train_cities', required=True, default='bj', type=str)
     parser.add_argument('--test_cities', required=True, default='nb', type=str)
-    parser.add_argument('--y_scale', action='store_true', help='std scale the target label')
+    parser.add_argument('--feature_choice', default=0, type='int',
+                        help='feature choice: 0 -> all, 1 -> poi feature, 2 -> street features, 3 -> engineer features')
+    parser.add_argument('--y_scale', action='store_true', help='whether z-score the target label')
     parser.add_argument('--model_choice', default=0, type=int, help='model choice: 0 -> cnn, 1-> dense cnn',
                         choices=[0, 1])
     parser.add_argument('--epochs', default=200, type=int)
@@ -41,4 +43,4 @@ if __name__ == '__main__':
 
     run(train_cities=train_city, test_cities=test_city, data_param_grid=data_param_config,
         model_param_dict=model_param_config,  y_scale=args.y_scale, epochs=args.epochs,
-        model_choice=ModelChoice(args.model_choice))
+        model_choice=ModelChoice(args.model_choice), feature_choice=FeatureChoice(args.feature_choice))

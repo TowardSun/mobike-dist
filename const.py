@@ -16,10 +16,10 @@ class ReducerChoice(IntEnum):
 
 
 class FeatureChoice(IntEnum):
-    poi = 0
-    street = 1
-    engineer = 2
-    all = 3
+    all = 0
+    poi = 1
+    street = 2
+    engineer = 3
 
 
 class Location:
