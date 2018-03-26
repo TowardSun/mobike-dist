@@ -11,11 +11,11 @@ from keras.optimizers import Adam
 from sklearn.decomposition import FactorAnalysis, PCA
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from decomposition import TCA
 from sklearn.model_selection import ParameterGrid
 from const import ModelChoice, CITY_BLOCK_DICT, FeatureChoice, ReducerChoice, PATH_PATTERN, TARGET, FEATURE_DICT
-from const import LOG_DIR
+from const import LOG_DIR, ScaleChoice
 from evaluation.metrics import *
 from models import DenseConvModel, conv_block
 import os
@@ -138,7 +138,7 @@ def get_conv_data(cities, x, y, window, filter_count=1):
 
 
 def get_train_val_test(train_cities, test_cities, features, window=5, reducer_choice=None,
-                       n_components=2, y_scale=False):
+                       n_components=2, scale_choice=ScaleChoice.origin):
     """
     Get train, validation set from train cities,
     get test set from test cities
@@ -148,7 +148,7 @@ def get_train_val_test(train_cities, test_cities, features, window=5, reducer_ch
     :param window:
     :param n_components: reduced dimension
     :param reducer_choice: Factor Analysis | PCA | TCA
-    :param y_scale:
+    :param scale_choice: target scale choice
     :return:
     """
     train_dfs = [pd.read_csv(PATH_PATTERN % city) for city in train_cities]
@@ -190,8 +190,13 @@ def get_train_val_test(train_cities, test_cities, features, window=5, reducer_ch
     x_test, y_test = get_conv_data(test_cities, x_test, y_test, window, filter_count=1)
 
     # scale the target y
-    y_scaler = StandardScaler().fit(y_train[:, np.newaxis])
-    if y_scale:
+    y_scaler = None
+    if scale_choice in (ScaleChoice.std, ScaleChoice.min_max):
+        if scale_choice == ScaleChoice.std:
+            y_scaler = StandardScaler().fit(y_train[:, np.newaxis])
+        else:
+            y_scaler = MinMaxScaler().fit(y_train[:, np.newaxis])
+
         y_train = y_scaler.transform(y_train[:, np.newaxis]).ravel()
         y_test = y_scaler.transform(y_test[:, np.newaxis]).ravel()
 
@@ -220,7 +225,8 @@ def write_results(result_file_path, results):
 
 
 def run(train_cities, test_cities, data_param_grid, model_param_dict, window=5,
-        model_choice=ModelChoice.cnn, feature_choice=FeatureChoice.all, epochs=40, y_scale=False, early_stopping=True,
+        model_choice=ModelChoice.cnn, feature_choice=FeatureChoice.all, epochs=40,
+        scale_choice=ScaleChoice.origin, early_stopping=True,
         early_stop_epoch=10):
     """
     main entrance to run the model
@@ -232,7 +238,7 @@ def run(train_cities, test_cities, data_param_grid, model_param_dict, window=5,
     :param model_choice: cnn model choice, simple cnn | dense net | res net
     :param feature_choice: multi-source feature selection
     :param epochs: max fit epochs
-    :param y_scale: whether scale the target y
+    :param scale_choice: target scale choice, no scale | std scale | min max scale
     :param early_stopping: whether early stopping
     :param early_stop_epoch: early stopping epoch counts
     :return:
@@ -255,14 +261,14 @@ def run(train_cities, test_cities, data_param_grid, model_param_dict, window=5,
     results = []
 
     result_file_path = './results/s_%s_t_%s_%s_%s_%s.csv' % (
-        '_'.join(train_cities), '_'.join(test_cities), model_choice.name, feature_choice.name, str(y_scale))
+        '_'.join(train_cities), '_'.join(test_cities), model_choice.name, feature_choice.name, scale_choice.name)
     for i, data_param in enumerate(candidate_data_params):
         if data_param['n_components'] > len(features):
             continue
 
         logger.info('Data config: %s' % data_param)
         x_train, x_val, x_test, y_train, y_val, y_test, y_scaler = get_train_val_test(
-            train_cities, test_cities, features, window, y_scale=y_scale, **data_param)
+            train_cities, test_cities, features, window, scale_choice=scale_choice, **data_param)
 
         data_best_loss = np.inf
         data_best_model_path = ''
@@ -305,13 +311,13 @@ def run(train_cities, test_cities, data_param_grid, model_param_dict, window=5,
         y_val_pred = nn_model.predict(x_val)
         y_test_pred = nn_model.predict(x_test)
 
-        if y_scale:
-            y_train = y_scaler.inverse_transform(y_train).ravel()
-            y_val = y_scaler.inverse_transform(y_val).ravel()
-            y_test = y_scaler.inverse_transform(y_test).ravel()
-            y_train_pred = y_scaler.inverse_transform(y_train_pred).ravel()
-            y_val_pred = y_scaler.inverse_transform(y_val_pred).ravel()
-            y_test_pred = y_scaler.inverse_transform(y_test_pred).ravel()
+        if y_scaler is not None:
+            y_train = y_scaler.inverse_transform(y_train.reshape(-1, 1)).ravel()
+            y_val = y_scaler.inverse_transform(y_val.reshape(-1, 1)).ravel()
+            y_test = y_scaler.inverse_transform(y_test.reshape(-1, 1)).ravel()
+            y_train_pred = y_scaler.inverse_transform(y_train_pred.reshape(-1, 1)).ravel()
+            y_val_pred = y_scaler.inverse_transform(y_val_pred.reshape(-1, 1)).ravel()
+            y_test_pred = y_scaler.inverse_transform(y_test_pred.reshape(-1, 1)).ravel()
 
         train_rmse = mse_evaluation(model_choice.name, y_train, y_train_pred, 'Train')
         val_rmse = mse_evaluation(model_choice.name, y_val, y_val_pred, 'Val')
@@ -324,7 +330,7 @@ def run(train_cities, test_cities, data_param_grid, model_param_dict, window=5,
         result_dict['reducer_choice'] = result_dict['reducer_choice'].name
         result_dict['feature_choice'] = feature_choice.name
         result_dict['model_choice'] = model_choice.name
-        result_dict['y_scale'] = y_scale
+        result_dict['y_scale'] = scale_choice.name
         result_dict['train_rmse'] = train_rmse
         result_dict['val_rmse'] = val_rmse
         result_dict['test_rmse'] = test_rmse
@@ -362,7 +368,7 @@ if __name__ == '__main__':
         train_cities=('sh',), test_cities=('nb',), data_param_grid=data_param_config,
         feature_choice=FeatureChoice.poi,
         model_param_dict=model_param_config,
-        y_scale=False, epochs=100,
+        scale_choice=ScaleChoice.min_max, epochs=100,
         model_choice=ModelChoice.cnn
     )
 

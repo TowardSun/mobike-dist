@@ -1,0 +1,2 @@
+model_choice,feature_choice,reducer_choice,n_components,y_scale,train_rmse,val_rmse,test_rmse,s_kl,s_rmlse,t_kl,t_rmlse,model_path
+cnn,poi,fa,10,min_max,11.436135858392374,12.142171827567404,15.296472548318022,0.1376769144875153,0.9416709975549963,0.15428968203791754,0.8830418748284469,./logs/0afdce7e-3108-11e8-b586-6a00022fd770.h5/best_model_0_0.h5

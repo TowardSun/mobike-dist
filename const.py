@@ -22,6 +22,12 @@ class FeatureChoice(IntEnum):
     engineer = 3
 
 
+class ScaleChoice(IntEnum):
+    origin = 0
+    std = 1
+    min_max = 2
+
+
 class Location:
     def __init__(self, lat, lng):
         self._lat = lat

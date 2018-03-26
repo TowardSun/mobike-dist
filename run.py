@@ -30,7 +30,8 @@ if __name__ == '__main__':
     parser.add_argument('--test_cities', required=True, default='nb', type=str)
     parser.add_argument('--feature_choice', default=0, type=int,
                         help='feature choice: 0 -> all, 1 -> poi feature, 2 -> street features, 3 -> engineer features')
-    parser.add_argument('--y_scale', action='store_true', help='whether z-score the target label')
+    parser.add_argument('--scale_choice', default=0, type=int,
+                        help='target scale choice: 0 -> no scale, 1 -> std scale, 2 -> min max scale')
     parser.add_argument('--model_choice', default=0, type=int, help='model choice: 0 -> cnn, 1-> dense cnn',
                         choices=[0, 1])
     parser.add_argument('--epochs', default=200, type=int)
@@ -42,5 +43,5 @@ if __name__ == '__main__':
     test_city = args.test_cities.split(',')
 
     run(train_cities=train_city, test_cities=test_city, data_param_grid=data_param_config,
-        model_param_dict=model_param_config,  y_scale=args.y_scale, epochs=args.epochs,
+        model_param_dict=model_param_config,  scale_choice=args.scale_choice, epochs=args.epochs,
         model_choice=ModelChoice(args.model_choice), feature_choice=FeatureChoice(args.feature_choice))
