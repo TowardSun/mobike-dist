@@ -1,0 +1,2 @@
+model_choice,feature_choice,reducer_choice,n_components,y_scale,train_rmse,val_rmse,test_rmse,s_kl,s_rmlse,t_kl,t_rmlse,model_path
+dense_cnn,all,pca,2,origin,11.5260097746,12.097671293800001,13.1964868129,0.12600971577199999,0.824137474491,0.10507992522500001,0.757839740575,./logs/62bd18b0-316a-11e8-933e-d094662bd47d/best_model_0_8.h5
