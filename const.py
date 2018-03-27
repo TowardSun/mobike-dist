@@ -10,9 +10,10 @@ class ModelChoice(IntEnum):
 
 
 class ReducerChoice(IntEnum):
-    fa = 0
-    pca = 1
-    tca = 2
+    all = 0
+    fa = 1
+    pca = 2
+    tca = 3
 
 
 class FeatureChoice(IntEnum):

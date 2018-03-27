@@ -12,3 +12,8 @@
     liuzhao+  57170  116  1.4 21908036 1231812 pts/15 Sl 19:27   0:46 python main.py --train_cities sh --test_cities nb --model_choice 1 --y_scale --epochs 200 --gpu 1
     liuzhao+  57171  116  1.5 21908036 1236536 pts/15 Sl 19:27   0:46 python main.py --train_cities sh --test_cities nb --model_choice 1 --epochs 200 --gpu 1
     ```
+
+3. 确定实验思路：
+    
+    * 对于target，采用原始数值进行回归即可，不需要进行min-max或者std scale；
+    * 普通的CNN网络性能是好于dense net的（也有可能是dense net的网络结构过于复杂）；

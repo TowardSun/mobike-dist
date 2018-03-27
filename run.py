@@ -9,7 +9,7 @@ from main import run
 if __name__ == '__main__':
     data_param_config = dict(
         n_components=list(range(2, 31, 4)),
-        reducer_choice=[ReducerChoice.pca, ReducerChoice.fa]
+        reducer_choice=[ReducerChoice.pca, ReducerChoice.fa, ReducerChoice.tca]
     )
     model_param_config = {
         ModelChoice.cnn: dict(
@@ -19,9 +19,9 @@ if __name__ == '__main__':
         ModelChoice.dense_cnn: dict(
             lr=[0.001, 0.0001],
             dropout=[0.2, 0.5],
-            first_filter=[16],
-            nb_dense_block_layers=[(4,)],
-            growth_rate=[6], compression=[0.5]
+            first_filter=[8, 16],
+            nb_dense_block_layers=[(2, ), (4,)],
+            growth_rate=[4, 6], compression=[0.5]
         )
     }
 

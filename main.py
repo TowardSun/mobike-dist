@@ -204,24 +204,31 @@ def get_train_val_test(train_cities, test_cities, features, window=5, reducer_ch
     return x_train, x_val, x_test, y_train, y_val, y_test, y_scaler
 
 
-def write_results(result_file_path, results):
+def write_results(result_file_path, result_item):
     columns = [
         'model_choice', 'feature_choice', 'reducer_choice', 'n_components', 'y_scale',
         'train_rmse', 'val_rmse', 'test_rmse', 's_kl', 's_rmlse',
         't_kl', 't_rmlse', 'model_path'
     ]
-    if os.path.exists(result_file_path):
-        old_res_df = pd.read_csv(result_file_path)
-        new_columns = [x for x in list(old_res_df) if x not in columns]
-        for new_col in new_columns:
-            old_res_df[new_col] = None
-        new_res_df = pd.DataFrame(results)
-        new_res_df = pd.concat([old_res_df, new_res_df])
+
+    res_list = []
+    for col in columns:
+        if col in result_item:
+            res_list.append(str(result_item[col]))
+        else:
+            res_list.append('none')
+
+    if not os.path.exists(result_file_path):
+        with open(result_file_path, 'w') as f:
+            f.write(','.join(columns) + '\n')
+            f.write(','.join(res_list) + '\n')
     else:
-        new_res_df = pd.DataFrame(results)
-    new_res_df = new_res_df[columns]
-    new_res_df.sort_values(by='t_kl', inplace=True)
-    new_res_df.to_csv(result_file_path, index=False)
+        with open(result_file_path, 'a') as f:
+            f.write(','.join(res_list) + '\n')
+
+    res_df = pd.read_csv(result_file_path)
+    res_df.sort_values(by='t_kl', inplace=True)
+    res_df.to_csv(result_file_path, index=False)
 
 
 def run(train_cities, test_cities, data_param_grid, model_param_dict, window=5,
@@ -250,15 +257,18 @@ def run(train_cities, test_cities, data_param_grid, model_param_dict, window=5,
     # make log dir
     if not os.path.exists(LOG_DIR):
         os.mkdir(LOG_DIR)
-    task_dir = os.path.join('./logs', str(uuid.uuid1()) + '.h5')
+    task_dir = os.path.join('./logs', str(uuid.uuid1()))
     if not os.path.exists(task_dir):
         os.mkdir(task_dir)
 
     model_param_grid = model_param_dict[model_choice]
     features = FEATURE_DICT[feature_choice]
     candidate_data_params = list(ParameterGrid(param_grid=data_param_grid))
+    candidate_data_params.append({
+        'n_components': -1,
+        'reducer_choice': ReducerChoice.all
+    })
     candidate_model_params = list(ParameterGrid(param_grid=model_param_grid))
-    results = []
 
     result_file_path = './results/s_%s_t_%s_%s_%s_%s.csv' % (
         '_'.join(train_cities), '_'.join(test_cities), model_choice.name, feature_choice.name, scale_choice.name)
@@ -274,6 +284,11 @@ def run(train_cities, test_cities, data_param_grid, model_param_dict, window=5,
         data_best_model_path = ''
         for j, model_param in enumerate(candidate_model_params):
             logger.info('Model config: %s' % model_param)
+            model_save_path = os.path.join(task_dir, 'best_model_%d_%d.h5' % (i, j))
+            config_save_path = os.path.join(task_dir, 'model_config_%d_%d.config' % (i, j))
+            with open(config_save_path, 'w') as f:
+                f.write(str(model_param))
+
             nn_model = build_model(x_train.shape[1:], model_choice=model_choice, **model_param)
             history_dict = {
                 'loss': [],
@@ -282,7 +297,6 @@ def run(train_cities, test_cities, data_param_grid, model_param_dict, window=5,
 
             best_val_loss = np.inf
             early_stop_counter = 0
-            model_save_path = os.path.join(task_dir, 'best_model_%d_%d.h5' % (i, j))
             for k in range(epochs):
                 print('\nEpoch %s/%s' % (k + 1, epochs))
                 history = nn_model.fit(
@@ -340,9 +354,8 @@ def run(train_cities, test_cities, data_param_grid, model_param_dict, window=5,
         result_dict['t_rmlse'] = t_rmlse
         result_dict['model_path'] = data_best_model_path
         logger.info(str(result_dict))
-        results.append(result_dict)
 
-    write_results(result_file_path, results)
+        write_results(result_file_path, result_dict)
 
 
 if __name__ == '__main__':
@@ -368,7 +381,7 @@ if __name__ == '__main__':
         train_cities=('sh',), test_cities=('nb',), data_param_grid=data_param_config,
         feature_choice=FeatureChoice.poi,
         model_param_dict=model_param_config,
-        scale_choice=ScaleChoice.min_max, epochs=100,
+        scale_choice=ScaleChoice.origin, epochs=100,
         model_choice=ModelChoice.cnn
     )
 
