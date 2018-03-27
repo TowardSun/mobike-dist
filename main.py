@@ -4,7 +4,7 @@
 import logging
 import pandas as pd
 import tensorflow as tf
-from keras.layers import Input, Dense, Flatten, Dropout, BatchNormalization, Activation
+from keras.layers import Input, Dense, Flatten, Dropout, BatchNormalization, Activation, Conv2D
 from keras.models import Model
 from keras.models import load_model
 from keras.optimizers import Adam
@@ -54,11 +54,13 @@ def transform_2_conv(lat_steps, lng_steps, x, y, size):
 
 def build_model(input_shape=(5, 5, 2), model_choice=ModelChoice.cnn, lr=0.001, dropout=0.5,
                 first_filter=6, nb_dense_block_layers=(6,), growth_rate=6, compression=0.5):
-    if model_choice not in (ModelChoice.cnn, ModelChoice.dense_cnn):
+    if model_choice not in (ModelChoice.cnn, ModelChoice.dense_cnn, ModelChoice.visualize_cnn):
         raise ValueError('not valid model choice')
 
     if model_choice == ModelChoice.cnn:
         model = build_cnn_model(input_shape, lr=lr, dropout=dropout)
+    elif model_choice == ModelChoice.visualize_cnn:
+        model = build_visualize_cnn_model(input_shape, lr=lr, dropout=dropout)
     elif model_choice == ModelChoice.dense_cnn:
         nn_model = DenseConvModel(
             input_shape, first_filters=first_filter, nb_dense_block_layers=nb_dense_block_layers,
@@ -69,6 +71,36 @@ def build_model(input_shape=(5, 5, 2), model_choice=ModelChoice.cnn, lr=0.001, d
     else:
         model = None
     return model
+
+
+def build_visualize_cnn_model(input_shape=(5, 5, 2), dropout=0.5, lr=0.001):
+    """
+    build CNN model
+    :param input_shape:
+    :param dropout:
+    :param lr:
+    :return:
+    """
+    inputs = Input(shape=input_shape)
+    layer = Conv2D(10, kernel_size=(5, 5), activation='relu', name='visualize_layer')(inputs)
+    layer = Flatten()(layer)
+
+    layer = Dense(32)(layer)
+    layer = BatchNormalization()(layer)
+    layer = Activation('relu')(layer)
+    layer = Dropout(dropout)(layer)
+
+    # layer = Dense(32)(layer)
+    # layer = BatchNormalization()(layer)
+    # layer = Activation('relu')(layer)
+    # layer = Dropout(dropout)(layer)
+    outputs = Dense(1)(layer)
+
+    nn_model = Model(inputs=inputs, outputs=outputs)
+    optimizer = Adam(lr=lr)
+    nn_model.compile(optimizer=optimizer, loss='mse')
+
+    return nn_model
 
 
 def build_cnn_model(input_shape=(5, 5, 2), dropout=0.5, lr=0.001):
@@ -234,7 +266,7 @@ def write_results(result_file_path, result_item):
 def run(train_cities, test_cities, data_param_grid, model_param_dict, window=5,
         model_choice=ModelChoice.cnn, feature_choice=FeatureChoice.all, epochs=40,
         scale_choice=ScaleChoice.origin, early_stopping=True,
-        early_stop_epoch=10):
+        early_stop_epoch=10, save_predict=False, test_origin=False):
     """
     main entrance to run the model
     :param train_cities: train cities' names
@@ -248,6 +280,8 @@ def run(train_cities, test_cities, data_param_grid, model_param_dict, window=5,
     :param scale_choice: target scale choice, no scale | std scale | min max scale
     :param early_stopping: whether early stopping
     :param early_stop_epoch: early stopping epoch counts
+    :param save_predict:
+    :param test_origin: whether test the origin feature space
     :return:
     """
     config = tf.ConfigProto()
@@ -264,10 +298,11 @@ def run(train_cities, test_cities, data_param_grid, model_param_dict, window=5,
     model_param_grid = model_param_dict[model_choice]
     features = FEATURE_DICT[feature_choice]
     candidate_data_params = list(ParameterGrid(param_grid=data_param_grid))
-    candidate_data_params.append({
-        'n_components': -1,
-        'reducer_choice': ReducerChoice.all
-    })
+    if test_origin:
+        candidate_data_params.append({
+            'n_components': -1,
+            'reducer_choice': ReducerChoice.all
+        })
     candidate_model_params = list(ParameterGrid(param_grid=model_param_grid))
 
     result_file_path = './results/s_%s_t_%s_%s_%s_%s.csv' % (
@@ -321,6 +356,11 @@ def run(train_cities, test_cities, data_param_grid, model_param_dict, window=5,
 
         nn_model = load_model(data_best_model_path)
 
+        if model_choice == ModelChoice.visualize_cnn:
+            kernel_layer = nn_model.get_layer('visualize_layer')
+            weights = kernel_layer.get_weights()
+            np.save(os.path.join(task_dir, 'kernel_weight.npy'), weights)
+
         y_train_pred = nn_model.predict(x_train)
         y_val_pred = nn_model.predict(x_val)
         y_test_pred = nn_model.predict(x_test)
@@ -332,6 +372,9 @@ def run(train_cities, test_cities, data_param_grid, model_param_dict, window=5,
             y_train_pred = y_scaler.inverse_transform(y_train_pred.reshape(-1, 1)).ravel()
             y_val_pred = y_scaler.inverse_transform(y_val_pred.reshape(-1, 1)).ravel()
             y_test_pred = y_scaler.inverse_transform(y_test_pred.reshape(-1, 1)).ravel()
+
+        if save_predict:
+            np.save(os.path.join(task_dir, 'y_pred.npy'), y_test_pred)
 
         train_rmse = mse_evaluation(model_choice.name, y_train, y_train_pred, 'Train')
         val_rmse = mse_evaluation(model_choice.name, y_val, y_val_pred, 'Val')
@@ -360,8 +403,8 @@ def run(train_cities, test_cities, data_param_grid, model_param_dict, window=5,
 
 if __name__ == '__main__':
     data_param_config = dict(
-        n_components=[10, 20],
-        reducer_choice=[ReducerChoice.fa]
+        n_components=[2],
+        reducer_choice=[ReducerChoice.all]
     )
     model_param_config = {
         ModelChoice.cnn: dict(
@@ -371,18 +414,22 @@ if __name__ == '__main__':
         ModelChoice.dense_cnn: dict(
             lr=[0.001],
             dropout=[0.2],
-            first_filter=[16],
-            nb_dense_block_layers=[(4,)],
-            growth_rate=[6], compression=[0.5]
-        )
+            first_filter=[8],
+            nb_dense_block_layers=[(2,)],
+            growth_rate=[4], compression=[0.5]
+        ),
+        ModelChoice.visualize_cnn: dict(
+            lr=[0.001],
+            dropout=[0.5]
+        ),
     }
 
     run(
-        train_cities=('sh',), test_cities=('nb',), data_param_grid=data_param_config,
-        feature_choice=FeatureChoice.poi,
+        train_cities=('bj',), test_cities=('nb',), data_param_grid=data_param_config,
+        feature_choice=FeatureChoice.all,
         model_param_dict=model_param_config,
         scale_choice=ScaleChoice.origin, epochs=100,
-        model_choice=ModelChoice.cnn
+        model_choice=ModelChoice.visualize_cnn, save_predict=True
     )
 
     # run(

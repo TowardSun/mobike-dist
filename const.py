@@ -7,6 +7,7 @@ from enum import IntEnum
 class ModelChoice(IntEnum):
     cnn = 0
     dense_cnn = 1
+    visualize_cnn = 2
 
 
 class ReducerChoice(IntEnum):
