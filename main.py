@@ -53,14 +53,14 @@ def transform_2_conv(lat_steps, lng_steps, x, y, size):
 
 
 def build_model(input_shape=(5, 5, 2), model_choice=ModelChoice.cnn, lr=0.001, dropout=0.5,
-                first_filter=6, nb_dense_block_layers=(6,), growth_rate=6, compression=0.5):
+                first_filter=6, nb_dense_block_layers=(6,), growth_rate=6, compression=0.5, bn=False):
     if model_choice not in (ModelChoice.cnn, ModelChoice.dense_cnn, ModelChoice.visualize_cnn):
         raise ValueError('not valid model choice')
 
     if model_choice == ModelChoice.cnn:
-        model = build_cnn_model(input_shape, lr=lr, dropout=dropout)
+        model = build_cnn_model(input_shape, lr=lr, dropout=dropout, bn=bn)
     elif model_choice == ModelChoice.visualize_cnn:
-        model = build_visualize_cnn_model(input_shape, lr=lr, dropout=dropout)
+        model = build_visualize_cnn_model(input_shape, lr=lr, dropout=dropout, bn=bn)
     elif model_choice == ModelChoice.dense_cnn:
         nn_model = DenseConvModel(
             input_shape, first_filters=first_filter, nb_dense_block_layers=nb_dense_block_layers,
@@ -73,12 +73,13 @@ def build_model(input_shape=(5, 5, 2), model_choice=ModelChoice.cnn, lr=0.001, d
     return model
 
 
-def build_visualize_cnn_model(input_shape=(5, 5, 2), dropout=0.5, lr=0.001):
+def build_visualize_cnn_model(input_shape=(5, 5, 2), dropout=0.5, lr=0.001, bn=False):
     """
     build CNN model
     :param input_shape:
     :param dropout:
     :param lr:
+    :param bn:
     :return:
     """
     inputs = Input(shape=input_shape)
@@ -86,7 +87,8 @@ def build_visualize_cnn_model(input_shape=(5, 5, 2), dropout=0.5, lr=0.001):
     layer = Flatten()(layer)
 
     layer = Dense(32)(layer)
-    layer = BatchNormalization()(layer)
+    if bn:
+        layer = BatchNormalization()(layer)
     layer = Activation('relu')(layer)
     layer = Dropout(dropout)(layer)
 
@@ -103,24 +105,30 @@ def build_visualize_cnn_model(input_shape=(5, 5, 2), dropout=0.5, lr=0.001):
     return nn_model
 
 
-def build_cnn_model(input_shape=(5, 5, 2), dropout=0.5, lr=0.001):
+def build_cnn_model(input_shape=(5, 5, 2), dropout=0.5, lr=0.001, bn=True):
     """
     build CNN model
     :param input_shape:
     :param dropout:
-    :param lr:
+    :param lr: learning rate
+    :param bn: whether batch normalization
     :return:
     """
     inputs = Input(shape=input_shape)
     # layer = Conv2D(10, kernel_size=(5, 5), activation='relu')(inputs)
-    layer = conv_block(inputs, filters=16, kernel_size=(1, 1), padding='valid', dropout_rate=dropout, conv_first=True)
-    layer = conv_block(layer, filters=32, kernel_size=(3, 3), padding='same', dropout_rate=dropout, conv_first=True)
-    layer = conv_block(layer, filters=16, kernel_size=(1, 1), padding='valid', dropout_rate=dropout, conv_first=True)
-    layer = conv_block(layer, filters=32, kernel_size=(3, 3), padding='valid', dropout_rate=dropout, conv_first=True)
+    layer = conv_block(inputs, filters=16, kernel_size=(1, 1), padding='valid', dropout_rate=dropout, conv_first=True,
+                       bn=bn)
+    layer = conv_block(layer, filters=32, kernel_size=(3, 3), padding='same', dropout_rate=dropout, conv_first=True,
+                       bn=bn)
+    layer = conv_block(layer, filters=16, kernel_size=(1, 1), padding='valid', dropout_rate=dropout, conv_first=True,
+                       bn=bn)
+    layer = conv_block(layer, filters=32, kernel_size=(3, 3), padding='valid', dropout_rate=dropout, conv_first=True,
+                       bn=bn)
     layer = Flatten()(layer)
 
     layer = Dense(32)(layer)
-    layer = BatchNormalization()(layer)
+    if bn:
+        layer = BatchNormalization()(layer)
     layer = Activation('relu')(layer)
     layer = Dropout(dropout)(layer)
 
@@ -307,6 +315,10 @@ def run(train_cities, test_cities, data_param_grid, model_param_dict, window=5,
 
     result_file_path = './results/s_%s_t_%s_%s_%s_%s.csv' % (
         '_'.join(train_cities), '_'.join(test_cities), model_choice.name, feature_choice.name, scale_choice.name)
+
+    best_val_rmse = np.inf
+    best_y_test_pred = None
+    best_y_test = None
     for i, data_param in enumerate(candidate_data_params):
         if data_param['n_components'] > len(features):
             continue
@@ -319,7 +331,7 @@ def run(train_cities, test_cities, data_param_grid, model_param_dict, window=5,
         data_best_model_path = ''
         for j, model_param in enumerate(candidate_model_params):
             logger.info('Model config: %s' % model_param)
-            model_save_path = os.path.join(task_dir, 'best_model_%d_%d.h5' % (i, j))
+            model_save_path = os.path.join(task_dir, 'model_%d_%d.h5' % (i, j))
             config_save_path = os.path.join(task_dir, 'model_config_%d_%d.config' % (i, j))
             with open(config_save_path, 'w') as f:
                 f.write(str(model_param))
@@ -400,6 +412,13 @@ def run(train_cities, test_cities, data_param_grid, model_param_dict, window=5,
 
         write_results(result_file_path, result_dict)
 
+        if val_rmse < best_val_rmse:
+            best_y_test_pred = y_test_pred
+            best_y_test = y_test
+            best_val_rmse = val_rmse
+
+    return best_y_test, best_y_test_pred
+
 
 if __name__ == '__main__':
     data_param_config = dict(
@@ -424,13 +443,27 @@ if __name__ == '__main__':
         ),
     }
 
-    run(
+    test_city_real, test_city_pred1 = run(
         train_cities=('bj',), test_cities=('nb',), data_param_grid=data_param_config,
         feature_choice=FeatureChoice.all,
         model_param_dict=model_param_config,
         scale_choice=ScaleChoice.origin, epochs=100,
-        model_choice=ModelChoice.visualize_cnn, save_predict=True
+        model_choice=ModelChoice.cnn, save_predict=True,
+        test_origin=True
     )
+
+    _, test_city_pred2 = run(
+        train_cities=('sh',), test_cities=('nb',), data_param_grid=data_param_config,
+        feature_choice=FeatureChoice.all,
+        model_param_dict=model_param_config,
+        scale_choice=ScaleChoice.origin, epochs=100,
+        model_choice=ModelChoice.cnn, save_predict=True,
+        test_origin=True
+    )
+
+    test_city_pred = 0.5 * (test_city_pred1 + test_city_pred2)
+
+    t_kl, t_rmlse = entropy_evaluation(ModelChoice.cnn.name, test_city_real, test_city_pred)
 
     # run(
     #     train_cities=('bj', ), test_cities=('nb',), data_param_grid=data_param_config,
