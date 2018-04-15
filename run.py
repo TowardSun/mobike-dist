@@ -45,4 +45,4 @@ if __name__ == '__main__':
 
     run(train_cities=train_city, test_cities=test_city, data_param_grid=data_param_config,
         model_param_dict=model_param_config,  scale_choice=ScaleChoice(args.scale_choice), epochs=args.epochs,
-        model_choice=ModelChoice(args.model_choice), feature_choice=FeatureChoice(args.feature_choice))
+        model_choice=ModelChoice(args.model_choice), feature_choice=FeatureChoice(args.feature_choice), test_origin=True)
