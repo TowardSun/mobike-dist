@@ -6,7 +6,6 @@ from const import ModelChoice, ReducerChoice, FeatureChoice, ScaleChoice
 from main import run
 from evaluation.metrics import entropy_evaluation
 
-
 if __name__ == '__main__':
     data_param_config = dict(
         n_components=list(range(2, 31, 2)),
@@ -22,7 +21,7 @@ if __name__ == '__main__':
             lr=[0.001, 0.0001],
             dropout=[0.2, 0.5],
             first_filter=[8, 16],
-            nb_dense_block_layers=[(2, ), (4,)],
+            nb_dense_block_layers=[(2,), (4,)],
             growth_rate=[4, 6], compression=[0.5]
         )
     }
@@ -50,16 +49,18 @@ if __name__ == '__main__':
         test_city_real, test_city_pred1, val_rmse1 = run(
             train_cities=[train_city[0]], test_cities=test_city,
             data_param_grid=data_param_config,
-            model_param_dict=model_param_config,  scale_choice=ScaleChoice(args.scale_choice), epochs=args.epochs,
-            model_choice=ModelChoice(args.model_choice), feature_choice=FeatureChoice(args.feature_choice)
+            model_param_dict=model_param_config, scale_choice=ScaleChoice(args.scale_choice), epochs=args.epochs,
+            model_choice=ModelChoice(args.model_choice), feature_choice=FeatureChoice(args.feature_choice, ),
+            test_origin=True
         )
         val_rmse1 = 1.0 / val_rmse1
 
         _, test_city_pred2, val_rmse2 = run(
             train_cities=[train_city[1]], test_cities=test_city,
             data_param_grid=data_param_config,
-            model_param_dict=model_param_config,  scale_choice=ScaleChoice(args.scale_choice), epochs=args.epochs,
-            model_choice=ModelChoice(args.model_choice), feature_choice=FeatureChoice(args.feature_choice)
+            model_param_dict=model_param_config, scale_choice=ScaleChoice(args.scale_choice), epochs=args.epochs,
+            model_choice=ModelChoice(args.model_choice), feature_choice=FeatureChoice(args.feature_choice),
+            test_origin=True
         )
         val_rmse2 = 1.0 / val_rmse2
 
@@ -70,6 +71,9 @@ if __name__ == '__main__':
 
         t_kl, t_rmlse = entropy_evaluation(ModelChoice.cnn.name, test_city_real, test_city_pred)
     else:
-        run(train_cities=train_city, test_cities=test_city, data_param_grid=data_param_config,
+        run(
+            train_cities=train_city, test_cities=test_city, data_param_grid=data_param_config,
             model_param_dict=model_param_config, scale_choice=ScaleChoice(args.scale_choice), epochs=args.epochs,
-            model_choice=ModelChoice(args.model_choice), feature_choice=FeatureChoice(args.feature_choice))
+            model_choice=ModelChoice(args.model_choice), feature_choice=FeatureChoice(args.feature_choice),
+            test_origin=True
+        )
