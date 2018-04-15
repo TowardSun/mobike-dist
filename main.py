@@ -118,7 +118,7 @@ def build_cnn_model(input_shape=(5, 5, 2), dropout=0.5, lr=0.001, bn=True):
     # layer = Conv2D(10, kernel_size=(5, 5), activation='relu')(inputs)
     layer = conv_block(inputs, filters=16, kernel_size=(1, 1), padding='valid', dropout_rate=dropout, conv_first=True,
                        bn=bn)
-    layer = conv_block(layer, filters=32, kernel_size=(3, 3), padding='same', dropout_rate=dropout, conv_first=True,
+    layer = conv_block(layer, filters=32, kernel_size=(3, 3), padding='valid', dropout_rate=dropout, conv_first=True,
                        bn=bn)
     layer = conv_block(layer, filters=16, kernel_size=(1, 1), padding='valid', dropout_rate=dropout, conv_first=True,
                        bn=bn)
@@ -417,18 +417,47 @@ def run(train_cities, test_cities, data_param_grid, model_param_dict, window=5,
             best_y_test = y_test
             best_val_rmse = val_rmse
 
-    return best_y_test, best_y_test_pred
+    return best_y_test, best_y_test_pred, best_val_rmse
+
+
+# def run_ensemble(train_city, test_city, data_param_grid, model_param_dict,
+#         model_choice=ModelChoice.cnn, feature_choice=FeatureChoice.all, epochs=40,
+#         scale_choice=ScaleChoice.origin):
+#
+#     assert len(train_city) > 1
+#     test_city_real, test_city_pred1, val_rmse1 = run(
+#         train_cities=[train_city[0]], test_cities=test_city,
+#         data_param_grid=data_param_grid,
+#         model_param_dict=model_param_dict, scale_choice=scale_choice, epochs=epochs,
+#         model_choice=ModelChoice(model_choice), feature_choice=FeatureChoice(feature_choice)
+#     )
+#     val_rmse1 = 1.0 / val_rmse1
+#
+#     _, test_city_pred2, val_rmse2 = run(
+#         train_cities=[train_city[1]], test_cities=test_city,
+#         data_param_grid=data_param_config,
+#         model_param_dict=model_param_dict, scale_choice=ScaleChoice(scale_choice), epochs=epochs,
+#         model_choice=ModelChoice(model_choice), feature_choice=FeatureChoice(feature_choice)
+#     )
+#     val_rmse2 = 1.0 / val_rmse2
+#
+#     w1 = val_rmse1 / (val_rmse1 + val_rmse2)
+#     w2 = val_rmse2 / (val_rmse1 + val_rmse2)
+#
+#     test_city_pred = w1 * test_city_pred1 + w2 * test_city_pred2
+#
+#     t_kl, t_rmlse = entropy_evaluation(ModelChoice.cnn.name, test_city_real, test_city_pred)
 
 
 if __name__ == '__main__':
     data_param_config = dict(
-        n_components=[2],
-        reducer_choice=[ReducerChoice.all]
+        n_components=[6],
+        reducer_choice=[ReducerChoice.fa]
     )
     model_param_config = {
         ModelChoice.cnn: dict(
             lr=[0.001],
-            dropout=[0.5]
+            dropout=[0.1]
         ),
         ModelChoice.dense_cnn: dict(
             lr=[0.001],
@@ -443,25 +472,38 @@ if __name__ == '__main__':
         ),
     }
 
-    test_city_real, test_city_pred1 = run(
-        train_cities=('bj',), test_cities=('nb',), data_param_grid=data_param_config,
+    test_city_real, test_city_pred1, val_rmse1 = run(
+        train_cities=('bj',), test_cities=('sh',),
+        data_param_grid=dict(
+            n_components=[6],
+            reducer_choice=[ReducerChoice.fa]
+        ),
         feature_choice=FeatureChoice.all,
         model_param_dict=model_param_config,
         scale_choice=ScaleChoice.origin, epochs=100,
         model_choice=ModelChoice.cnn, save_predict=True,
         test_origin=True
     )
+    val_rmse1 = 1.0 / val_rmse1
 
-    _, test_city_pred2 = run(
-        train_cities=('sh',), test_cities=('nb',), data_param_grid=data_param_config,
+    _, test_city_pred2, val_rmse2 = run(
+        train_cities=('nb',), test_cities=('sh',),
+        data_param_grid=dict(
+            n_components=[18],
+            reducer_choice=[ReducerChoice.fa]
+        ),
         feature_choice=FeatureChoice.all,
         model_param_dict=model_param_config,
         scale_choice=ScaleChoice.origin, epochs=100,
         model_choice=ModelChoice.cnn, save_predict=True,
         test_origin=True
     )
+    val_rmse2 = 1.0 / val_rmse2
 
-    test_city_pred = 0.5 * (test_city_pred1 + test_city_pred2)
+    w1 = val_rmse1 / (val_rmse1 + val_rmse2)
+    w2 = val_rmse2 / (val_rmse1 + val_rmse2)
+
+    test_city_pred = w1 * test_city_pred1 + w2 * test_city_pred2
 
     t_kl, t_rmlse = entropy_evaluation(ModelChoice.cnn.name, test_city_real, test_city_pred)
 
