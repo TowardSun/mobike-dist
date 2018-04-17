@@ -9,12 +9,13 @@ from evaluation.metrics import entropy_evaluation
 if __name__ == '__main__':
     data_param_config = dict(
         n_components=list(range(2, 31, 2)),
-        reducer_choice=[ReducerChoice.pca, ReducerChoice.fa]
+        # n_components=[2],
+	reducer_choice=[ReducerChoice.pca, ReducerChoice.fa]
     )
     model_param_config = {
         ModelChoice.cnn: dict(
-            lr=[0.001],
-            dropout=[0.2],
+            lr=[0.001, 0.0005],
+            dropout=[0.0, 0.2, 0.5],
             bn=[True]
         ),
         ModelChoice.dense_cnn: dict(
