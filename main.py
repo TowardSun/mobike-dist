@@ -473,9 +473,9 @@ if __name__ == '__main__':
     }
 
     test_city_real, test_city_pred1, val_rmse1 = run(
-        train_cities=('bj',), test_cities=('sh',),
+        train_cities=('bj',), test_cities=('nb',),
         data_param_grid=dict(
-            n_components=[6],
+            n_components=[2],
             reducer_choice=[ReducerChoice.fa]
         ),
         feature_choice=FeatureChoice.all,
@@ -487,9 +487,9 @@ if __name__ == '__main__':
     val_rmse1 = 1.0 / val_rmse1
 
     _, test_city_pred2, val_rmse2 = run(
-        train_cities=('nb',), test_cities=('sh',),
+        train_cities=('sh',), test_cities=('nb',),
         data_param_grid=dict(
-            n_components=[18],
+            n_components=[14],
             reducer_choice=[ReducerChoice.fa]
         ),
         feature_choice=FeatureChoice.all,
