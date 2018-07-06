@@ -22,7 +22,7 @@ If you're interested in these data, you can crawl or get the data from our provi
 
 
 
-## Project Structure
+<!--## Project Structure
 
 The project is organized as follows: 
 	
@@ -43,6 +43,7 @@ road_match/
 util/
 	general common functions
 ```
+-->
 
 ## Run Command
 	
